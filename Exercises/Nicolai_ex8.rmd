@@ -1,0 +1,416 @@
+---
+title: "Nicolai_ex8"
+author: "Andrea Nicolai"
+date: "2/6/2020"
+output: html_document
+---
+
+Exercise 1
+
+
+Students from the Bachelor degree in Physics performed an experiment to study the Zeeman effect. The apparatus contains a $Ne$ source lamp whose position can be changed. During the setting up of the apparatus, the source position has to be adjusted in order to maximize the intensity of the detected light signal.
+
+The following table gives the position of the source (in $mm$) and the corresponding height of the peak (arbitrary units) for the wavelength under study:
+```{r}
+x_i <- c(2.44,3.49,3.78,3.31,3.18,3.15,3.1,3.0,3.6,3.4)
+
+y_i <- c(129,464,189,562,589,598,606,562,360,494)
+y_i_standardized <- (y_i-mean(y_i))/sd(y_i)
+y_i_standardized <- y_i
+y_i_standardized <- y_i/1e3
+```
+
+Assume a quadratic dependence of the peak height, $y_i$ as a function of the source position $x_i$,
+$$f (x) = c_0 + c_1 x + c_2 x^2$$
+• All the measured values are affected by a Gaussian noise with zero mean, such that:
+$$
+y_i = f(x_i) + \epsilon
+$$
+
+• where $\epsilon$ follows a normal distribution with mean $\mu = 0$ and unknown standard deviation, $\sigma$
+
+A) Build a Markov Chain Monte Carlo to estimate the best parameters of the quadratic dependence of the data and the noise that affects the measured data.
+```{r}
+library(mvtnorm)
+library(gplots)
+```
+
+We can change the prior and the $\theta[2]$ parameter, that is the $b_1$ term, to not have any transformation of the parameter (i.e. the $tan$) that was indeed previously present in the notebook. We have chosen to proceed this way in this file. We can find good estimates of parameter also in this way, but we can use the original parameters and good results still follow.
+```{r}
+metrop <- function(func, thetaInit, Nburnin, Nsamp, sampleCov, verbose, 
+                   demo=FALSE, ...) {
+
+  Ntheta   <- length(thetaInit)
+  thetaCur <- thetaInit
+  funcCur  <- func(thetaInit, ...) # log10
+  funcSamp <- matrix(data=NA, nrow=Nsamp, ncol=2+Ntheta) 
+  
+  # funcSamp will be filled and returned
+  nAccept  <- 0
+  acceptRate <- 0
+  if(demo) {
+    thetaPropAll <- matrix(data=NA, nrow=Nsamp, ncol=Ntheta)
+  }
+  
+  for(n in 1:(Nburnin+Nsamp)) {
+
+    # Metropolis algorithm. No Hastings factor for symmetric proposal
+    if(is.null(dim(sampleCov))) { # theta and sampleCov are scalars
+      thetaProp <- rnorm(n=1, mean=thetaCur, sd=sqrt(sampleCov))
+    } else {
+      thetaProp <- rmvnorm(n=1, mean=thetaCur, sigma=sampleCov, 
+                           method="eigen")
+    }
+    funcProp  <- func(thetaProp, ...) 
+    logMR <- sum(funcProp) - sum(funcCur) # log10 of the Metropolis ratio
+    #cat(n, thetaCur, funcCur, ":", thetaProp, funcProp, "\n")
+    if(logMR>=0 || logMR>log10(runif(1, min=0, max=1))) {
+      thetaCur   <- thetaProp
+      funcCur    <- funcProp
+      nAccept    <- nAccept + 1
+      acceptRate <- nAccept/n
+    }
+    if(n>Nburnin) {
+      funcSamp[n-Nburnin,1:2] <- funcCur
+      funcSamp[n-Nburnin,3:(2+Ntheta)] <- thetaCur
+      if(demo) {
+        thetaPropAll[n-Nburnin,1:Ntheta] <- thetaProp
+      }
+    }
+
+    # Diagnostics
+    if( is.finite(verbose) && (n%%verbose==0 || n==Nburnin+Nsamp) ) {
+      s1 <- noquote(formatC(n,          format="d", digits=5, flag=""))
+      s2 <- noquote(formatC(Nburnin,    format="g", digits=5, flag=""))
+      s3 <- noquote(formatC(Nsamp,      format="g", digits=5, flag=""))
+      s4 <- noquote(formatC(acceptRate, format="f", digits=4, width=7, 
+                            flag=""))
+      cat(s1, "of", s2, "+", s3, s4, "\n")
+    }
+
+  }
+
+  if(demo) {
+    return(list(funcSamp=funcSamp, thetaPropAll=thetaPropAll))
+  } else {
+    return(funcSamp)
+  }
+ 
+}
+
+# Return log10(unnormalized prior)
+logprior.quadraticmodel <- function(theta) {
+  b0Prior      <- dnorm(theta[1], mean=-7 , sd=8)
+  b1Prior      <- dnorm(theta[2], mean=6  , sd=2)
+  b2Prior      <- dnorm(theta[3], mean=0.5, sd=4)
+  logysigPrior <- 1 
+  logPrior <- sum( log10(b0Prior), log10(b1Prior), log10(b2Prior), log10(logysigPrior) )
+  return(logPrior)
+}
+
+
+logpost.quadraticmodel <- function(theta, obsdata) {
+  logprior <- logprior.quadraticmodel(theta)
+  if(is.finite(logprior)) { # only evaluate model if parameters are sensible
+    return( c(logprior, loglike.quadraticmodel(theta, obsdata)) )
+  } else {
+    return( c(-Inf, -Inf) )
+  }
+}
+
+# Return log10(likelihood) for parameters theta and obsdata
+# dnorm(..., log=TRUE) returns log base e, so multiply by 1/ln(10) = 0.4342945
+# to get log base 10
+loglike.quadraticmodel <- function(theta, obsdata) {
+  # convert log10(ysig) to ysig
+  theta[4] <- 10^theta[4]
+  modPred <- drop( theta[1:3] %*% t(cbind(1,obsdata$x,obsdata$x^2)) )
+  # Dimensions in above mixed vector/matrix multiplication: [Ndat] = [P] %*% [P x Ndat] 
+  logLike <- (1/log(10))*sum( dnorm(modPred - obsdata$y, mean=0, sd=theta[4], log=TRUE) )
+  return(logLike)
+}
+
+```
+
+
+```{r}
+obsdata <- data.frame(cbind(x_i,y_i_standardized))
+  
+sampleCov <- diag(c(0.1, 0.01, 0.01, 0.01)^2)
+
+thetaInit <- c(2, 1, 0.3, log10(2))
+
+# Run the MCMC to find postSamp, samples of the posterior PDF
+set.seed(1995)
+allSamp <- metrop(func=logpost.quadraticmodel, thetaInit=thetaInit, Nburnin=2e4, Nsamp=2e5,
+                   sampleCov=sampleCov, verbose=1e3, obsdata=obsdata)
+# 10^(allSamp[,1]+allSamp[,2]) is the unnormalized posterior at each sample
+
+thinSel  <- seq(from=1, to=nrow(allSamp), by=100) # thin by factor 100
+postSamp <- allSamp[thinSel,]
+```
+
+
+```{r}
+par(mfrow=c(4,2), mar=c(3.0,3.5,0.5,0.5), oma=0.5*c(1,1,1,1), mgp=c(1.8,0.6,0), cex=0.9)
+parnames <- c(expression(b[0]), expression(b[1]), expression(b[2]), 
+              expression(paste(log, " ", sigma)))
+for(j in 3:6) { # columns of postSamp
+  plot(1:nrow(postSamp), postSamp[,j], type="l", xlab="iteration", ylab=parnames[j-2])
+  postDen <- density(postSamp[,j], n=2^10)
+  plot(postDen$x, postDen$y, type="l", lwd=1.5, yaxs="i", ylim=1.05*c(0,max(postDen$y)),
+       xlab=parnames[j-2], ylab="density")
+# abline(v=thetaTrue[j-2], lwd=1.5, lty=3)
+}
+
+# Plot all parameter samples in 2D
+pdf("quadraticmodel_parameter_correlations.pdf", width=6, height=6)
+par(mfcol=c(3,3), mar=c(3.5,3.5,0.5,0.5), oma=c(0.1,0.1,0.1,0.5), mgp=c(2.0,0.8,0))
+for(i in 1:3) {
+  for(j in 2:4) {
+    if(j<=i) {
+        plot.new()
+      } else {
+        plot(postSamp[,i+2], postSamp[,j+2], xlab=parnames[i], ylab=parnames[j], pch=".")
+    }
+  }
+}
+
+# Find MAP and mean solutions.
+# MAP = Maximum A Posteriori, i.e. peak of posterior.
+# MAP is not the peak in each 1D PDF, but the peak of the 4D PDF.
+# mean is easy, because samples have been drawn from the (unnormalized) posterior.
+posMAP    <- which.max(postSamp[,1]+postSamp[,2]) 
+thetaMAP  <- postSamp[posMAP, 3:6]
+thetaMean <- apply(postSamp[,3:6], 2, mean) # Monte Carlo integration
+graphics.off()
+```
+
+
+```{r}
+
+plotCI(obsdata$x, obsdata$y, xaxs="i", yaxs="i", xlim = c(2,4),
+       xlab="x", ylab="y", uiw=10^thetaMAP[4], gap=0)
+
+xrange <- seq(min(x_i), max(x_i) , by = 0.01)
+xsamp <- xrange
+xlim <- c(2,4)
+ylim <- c(0, 0.6)
+
+#lines(xsamp, drop(ysamp), col="red", lwd=2) # true model
+#ysamp <- cbind(1,xsamp,xsamp^2) %*% as.matrix(c(thetaMean[1], tan(thetaMean[2]), thetaMean[3])) 
+#lines(xsamp, drop(ysamp), col="green", lwd=2) # mean model
+ysamp <- cbind(1,xsamp,xsamp^2) %*% as.matrix(c(thetaMAP[1], thetaMAP[2], thetaMAP[3]))
+
+lines(xsamp, drop(ysamp), lwd=2, col = 'red') # MAP model
+lines(xsamp, thetaMAP[1] + thetaMAP[2]*xsamp + thetaMAP[3]*xsamp^2, col = 'red')
+
+```
+
+• as can be seen from our data, the students forgot to take measurements in the region $x \in (2.44, 3.0)$
+
+B) run a Markov Chain Monte Carlo to predict peak height measurements at $x_1 = 2.8 mm$ and $x_2 = 2.6 mm$
+```{r}
+xnew <- c(2.6, 2.8, 2.47, 2.51)
+y_predic_candid <- c()
+
+for (value in xnew){
+  
+  # Evaluate generative model at posterior samples (from MCMC).
+  # Dimensions in matrix multiplication: [Nsamp x 1] = [Nsamp x P] %*% [P x 1]
+  modPred <- cbind(postSamp[,3], postSamp[,4], postSamp[,5] ) %*% t(cbind(1,value, value^2))
+  
+  # Direct method
+  # ycand must span full range of likelihood and posterior
+  dy    <- 0.01
+  ymid  <- thetaMAP[1] + value*thetaMAP[2] + value*value*(thetaMAP[3])  # to center choice of ycand
+  ycand <- seq(0, ymid+1, dy) # uniform grid of y with step size dy
+  ycandPDF <- vector(mode="numeric", length=length(ycand))
+  for(k in 1:length(ycand)) {
+    like <- dnorm(ycand[k], mean=modPred, sd=10^postSamp[,6]) # [Nsamp x 1]
+    ycandPDF[k] <- mean(like) # integration by rectangle rule. Gives a scalar
+  }
+  # Note that ycandPDF[k] is normalized, i.e. sum(dy*ycandPDF)=1.
+  # Find peak and approximate confidence intervals at 1sigma on either side
+  peak.ind  <- which.max(ycandPDF)
+  lower.ind <- max( which(cumsum(dy*ycandPDF) < pnorm(-1)) )
+  upper.ind <- min( which(cumsum(dy*ycandPDF) > pnorm(+1)) )
+  yPredDirect <- ycand[c(peak.ind, lower.ind, upper.ind)]
+  
+  # Indirect method. likeSamp is [Nsamp x 1]
+  likeSamp <- rnorm(n=length(modPred), mean=modPred, sd=10^postSamp[,6])
+  likeDen  <- density(likeSamp, n=2^10)
+  # Find peak and confidence intervals
+  yPredIndirect <- c(likeDen$x[which.max(likeDen$y)], quantile(likeSamp, 
+                            probs=c(pnorm(-1), pnorm(+1)), names=FALSE))
+  
+  # Plot the predictive posterior distribution
+  plot(ycand, ycandPDF, type="l", lwd=1.5, yaxs="i", 
+       ylim=1.05*c(0,4), xlab=expression(y[p]), 
+       ylab=expression(paste("P(", y[p], " | ", x[p], ", D)")),
+       main = sprintf("Predicted posterior and CI for x= %1.2f", value)) 
+  abline(v=yPredDirect, lty=2, col = 'red')
+  # overplot result from the indirect method
+  lines(likeDen$x, likeDen$y, type="l", lty=3, lwd=1.5, col = 'darkred')
+  y_predic_candid <- rbind(y_predic_candid, yPredDirect)
+}
+```
+
+
+```{r}
+
+plotCI(obsdata$x, obsdata$y, xlim=xlim, ylim=ylim, xaxs="i", yaxs="i", 
+       uiw=10^thetaMAP[4], gap=0, xlab="x", ylab="y", main = 'Predicted data')
+
+index <- 1
+for (i in 1:nrow(y_predic_candid)) {
+
+  ycand <- y_predic_candid[i,]
+  
+  plotCI(xnew[i], ycand[1], li=ycand[2], ui=ycand[3],
+  gap=0, add=TRUE, lwd=3, col = 'red')
+}
+
+
+xsamp <- seq(2,4,by=0.01)
+lines(xsamp, thetaMAP[1] + thetaMAP[2]*xsamp + thetaMAP[3]*xsamp^2, col = 'darkred')
+
+
+```
+
+
+
+
+Exercise 2
+
+The number of British coal mine disasters has been recorded from 1851 to 1962. By looking at the data it seems that the number of incidents decreased towards the end of the sampling period. We model the data as follows:
+
+- before some year, we call $\tau$, the data follow a Poisson distribution, where the logarithm of the mean value, $log \mu_t = b_0$ , while for later years, we can model it as $log \mu_t = b_0 + b_1$
+
+The dependence can be modeled as follows $y_t ∼ Pois(\mu_t )$, where $log \mu_t = b_0 + b_1 Step(t − \tau )$
++ implement the model in jags, trying to infer the parameters $b 0$ , $b 1$ and $\tau$
++ the step function is implemented, in BUGS, as $step(x)$ and return 1 if $x \geqslant 0$ and 0 otherwise
++ assign a uniform prior to $b_0$ , $b_1$ and a uniform prior in the interval $(1, N )$, where $N = 112$ is the number of years our data span on.
+  
+Finally, here is our data:
+```{r}
+data <- NULL
+data$D <- c ( 4 , 5 , 4 , 1, 0 , 4 , 3 , 4 , 0 , 6 , 3 ,3 ,4 ,0 ,2 ,6 ,3 ,3 ,5 ,4 ,5 ,3 ,1 ,4 ,4 ,1 ,5 ,5 ,3 ,4 ,2 ,5 ,2 ,2 ,3 ,4 ,2 ,1 ,3 ,2 , 1 ,1 ,1 ,1 ,1 ,3 ,0 ,0 ,1 ,0 ,1 ,1 ,0 ,0 ,3 ,1 ,0 ,3 ,2 ,2 , 0 ,1 ,1 ,1 ,0 ,1 ,0 ,1 ,0 ,0 ,0 ,2 ,1 ,0 ,0 ,0 ,1 ,1 ,0 ,2 , 2 ,3 ,1 ,1 ,2 ,1 ,1 ,1 ,1 ,2 ,4 ,2 ,0 ,0 ,0 ,1 ,4 ,0 ,0 ,0 , 1 ,0 ,0 ,0 ,0 ,0 ,1 ,0 ,0 ,1 ,0 ,0)
+data$N <- 112
+```
+
++ before running $jags$, assign an initial value to the parameters as follows: $b_0 = 0$, $b_1 = 0$ and $\tau = 50$
+```{r}
+inits <- NULL
+inits$b0  <- 0
+inits$b1  <- 0
+inits$tau <- 50
+```
+
+```{r}
+library (rjags)
+library (coda)
+
+autocorrelation_plots <- function(data) {
+  par( mfrow=c(3,3) )
+  plot(my.lags, as.data.frame(data)$b0.b0, ylim=c(0,1), pch=12, col='navy', xlab='lag', ylab='ACF ', cex=1.3, main = "b0 vs b0 - Autocorrelation")
+  plot(my.lags, as.data.frame(data)$b0.b1, ylim=c(0,1), pch=12, col='navy', xlab='lag', ylab='ACF ', cex=1.3, main = "b0 vs b1 - Autocorrelation")
+  plot(my.lags, as.data.frame(data)$b0.tau, ylim=c(0,1), pch=12, col='navy', xlab='lag', ylab='ACF ', cex=1.3, main = "b0 vs tau - Autocorrelation")
+  plot(my.lags, as.data.frame(data)$b1.b0, ylim=c(0,1), pch=12, col='navy', xlab='lag', ylab='ACF ', cex=1.3, main = "b1 vs b0 - Autocorrelation")
+  plot(my.lags, as.data.frame(data)$b1.b1, ylim=c(0,1), pch=12, col='navy', xlab='lag', ylab='ACF ', cex=1.3, main = "b1 vs b1 - Autocorrelation")
+  plot(my.lags, as.data.frame(data)$b1.tau, ylim=c(0,1), pch=12, col='navy', xlab='lag', ylab='ACF ', cex=1.3, main = "b1 vs tau - Autocorrelation")
+  plot(my.lags, as.data.frame(data)$tau.b0, ylim=c(0,1), pch=12, col='navy', xlab='lag', ylab='ACF ', cex=1.3, main = "tau vs b0 - Autocorrelation")
+  plot(my.lags, as.data.frame(data)$tau.b1, ylim=c(0,1), pch=12, col='navy', xlab='lag', ylab='ACF ', cex=1.3, main = "tau vs b1 - Autocorrelation")
+  plot(my.lags, as.data.frame(data)$tau.tau, ylim=c(0,1), pch=12, col='navy', xlab='lag', ylab='ACF ', cex=1.3, main = "tau vs tau - Autocorrelation")
+}
+```
+
++ explore the features of the chains and try to understand the effects of the burn-in, and thinning
+We now implement a chain without burn-in and see how it behaves
+```{r}
+set.seed(1995)
+
+model <- "Nicolai_ex8.bug"
+jm <- jags.model(model , data, inits)
+
+#second parameter is the Burn-in parameter  
+update (jm , 1)
+
+#now run it 
+chain <- coda.samples(jm , c("b0", "b1", "tau"), n.iter=1000)
+
+my.lags = seq(0, 200 , 5)
+y1 <- autocorr(chain, lags=my.lags)
+autocorrelation_plots(y1)
+```
+
+
+We see as for the burn-in parameter it is sufficient to skip only the 10-100 first steps of the MCMC simulation.
+Let us now restart it evaluating the thinning parameter
+```{r}
+metric_trial <- NULL 
+thinning_params_set <- c(10, 25, 50, 100, 250, 500)
+
+for (thin_par in thinning_params_set) {
+  
+  set.seed(1995)
+  model <- "Nicolai_ex8.bug"
+  jm <- jags.model(model , data, inits)
+  update (jm , 1000)
+  chain_thinned <- coda.samples(jm , c("b0", "b1", "tau"), n.iter=100000, thin = thin_par)
+
+  # Let ’s format our chain
+  chain.df <- as.data.frame ( as.mcmc( chain_thinned ) )
+  cat( sprintf ("\n For thinning parameter = %d, the correlation matrix : \n", thin_par))
+  
+  temp_mat <- cor(chain.df)
+  
+  print(temp_mat)
+  
+  metric_trial <- c(metric_trial, temp_mat[1,2]**2 + temp_mat[1,3]**2, temp_mat[2,3]**2 )
+  
+  par( mfrow=c(1,3) , oma=c(0,0,2,0))
+
+  plot( chain.df$b0 , chain.df$b1, xlab= "b0", ylab= "b1", pch="+", col="navy", cex=0.75, asp=1, xlim = c(0.8,1.4), ylim = c(-2,-0.5))
+  plot( chain.df$b0 , chain.df$tau, xlab= "b0", ylab= "tau", pch="+", col="navy", cex=0.75, asp=1, xlim = c(0.8,1.4), ylim = c(30,50))
+  plot( chain.df$tau , chain.df$b1, xlab= "tau", ylab= "b1", pch="+", col="navy", cex=0.75, asp=1, xlim = c(30,50), ylim = c(-2,-0.5))
+  mtext(sprintf("Thinning parameter = %.d", thin_par), line=0, side=3, outer=TRUE, cex=1.25)
+  
+}
+
+best_thin <- thinning_params_set[which.min(metric_trial)]
+
+```
+
+We see that for higher thinning parameter we have a smaller dispersion of values. Let us run the "definitive" MCMC.
+```{r}
+set.seed(1995)
+model <- "Nicolai_ex8.bug"
+jm <- jags.model(model , data, inits)
+update (jm , 1000)
+chain_thinned <- coda.samples(jm , c("b0", "b1", "tau"), n.iter=100000, thin = best_thin)
+
+# Let ’s format our chain
+chain.df <- as.data.frame ( as.mcmc( chain_thinned ) )
+
+```
+
++ plot the posterior distributions of the parameters and extract their mean values
+```{r}
+plot(chain , col="navy")
+print(summary(chain_thinned))
+```
+
+```{r}
+sprintf("For b0 we have that the max value (mode) is %1.2f, while the mean and std are: %1.2f +- %1.2f", max(chain.df$b0), mean(chain.df$b0), sd(chain.df$b0) )
+sprintf("For b0 95%% CI is [ %1.2f , %1.2f ] ",quantile(chain.df$b0, 0.025)[[1]] , quantile(chain.df$b0, 0.975)[[1]] )
+
+sprintf("For b1 we have that the max value (mode) is %1.2f, while the mean and std are: %1.2f +- %1.2f", max(chain.df$b1), mean(chain.df$b1), sd(chain.df$b1) )
+sprintf("For tau 95%% CI is [ %1.2f , %1.2f ] ", quantile(chain.df$b1, 0.025)[[1]] , quantile(chain.df$b1, 0.975)[[1]] )
+
+sprintf("For tau we have that the max value (mode) is %2.1f, while the mean and std are: %2.1f +- %2.1f", max(chain.df$tau), mean(chain.df$tau), sd(chain.df$tau) )
+sprintf("For tau 95%% CI is [ %2.1f , %2.1f ] ", quantile(chain.df$tau, 0.025)[[1]] , quantile(chain.df$tau, 0.975)[[1]] )
+```
+
+
+

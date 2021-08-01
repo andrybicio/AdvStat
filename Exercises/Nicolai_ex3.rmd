@@ -1,0 +1,233 @@
+---
+title: "Nicolai_ex03"
+author: "Andrea Nicolai"
+date: "20/4/2020"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+## Exercise 1
+
+The time it takes a student to complete a TOLC-I University orientation and evaluation test follows a density function of the form:
+$$
+f (t) =
+\begin{cases} 
+c(t − 1)(2 − t) \qquad for\ 1 <t< 2 \\
+0 \qquad \qquad \qquad \qquad otherwise
+\end{cases}
+$$
+where t is the time in hours.
+
+a) using the integrate() R function, determine the constant c (and verify it analytically)
+```{r}
+funct <- function(t) {
+  temp <- ifelse ( t<2 & t>1 , 
+                  (t-1)*(2-t),
+                   0 )
+  return(temp)
+  }
+
+funct.integral <- integrate(funct, lower = 1, upper = 2)
+message(sprintf("The constant of integration c is: %.1f", 1/funct.integral$value))
+```
+Analitically we have that:
+
+$$ \int_1^2 (t − 1)(2 − t)dt = 1/c  $$
+That is 
+$$ \left[ \frac{3t^2}{2} -2t - \frac{t^3}{3} \right]_1^2 = 1/c \quad \Rightarrow 1/6 = 1/c \Rightarrow \quad c = 6   $$ 
+b) write the set of four R functions and plot the pdf and cdf, respectively
+
+The cumulative computed analytically is:
+$$ F(t) = 
+\begin{cases}
+ 0 \qquad  \qquad  \qquad  \qquad  \qquad  \qquad t < 1 \\
+ -2t^3 + 9t^2 -12t + 5  \qquad \quad 1 \leqslant t \leqslant 2\\
+ 1 \qquad  \qquad  \qquad  \qquad  \qquad  \qquad t > 2 \\
+\end{cases} $$
+
+```{r}
+dprob1 <- function(t) { 
+  temp <- ifelse ( t<2 & t>1, ((t-1)*(2-t)/func.integral$value), 0 )
+  return(temp)
+  }
+
+pprob1 <- function(t) {
+    tempcdf <- ifelse ( t<1, 0, ifelse(t<2 , -2*t^3 + 9*t^2 - 12*t + 5, 1) )
+  return(tempcdf) 
+}
+
+rprob1 <- function(n) {
+  u.1 <- runif(n, 1, 2)
+  u.2 <- runif(n)
+  func.max <- max(dprob1(seq(1,2,0.01)))
+  y <- ifelse(u.2*func.max < dprob1(u.1), u.1, NA)
+  y.clean <- y[!is.na(y)]
+  return(y.clean)
+}
+
+  qprob1 <- function(q, n=1000) {
+    u.1 <- runif(n, 1, 2)
+    y <- ifelse(pprob1(u.1) < q, u.1, NA)
+    y.clean <- y[!is.na(y)]
+    return(max(y.clean))
+  }
+```
+
+c) evaluate the probability that the student will finish the aptitude test in more than 75 minutes. And that it will take 90 and 120 minutes.
+```{r}
+message(sprintf("Probability that the student will finish the aptitude test in more than 75 minutes is: %.2f", 1-pprob1(1.25)))
+
+message(sprintf("Probability that it will take 90 and 120 minutes is:  %.2f", pprob1(2)-pprob1(1.5)))
+```
+
+
+## Exercise 2
+
+The lifetime of tires sold by an used tires shop is 10 4 · x km, where x is a random variable following the distribution function:
+$$
+f (x) =
+\begin{cases}
+\frac{1}{x^2} \ \qquad 1<x<2\\
+0 \qquad \quad otherwise
+\end{cases}
+$$
+Anlytically the CDF is :
+$$
+F(x) =
+\begin{cases} 
+0 \qquad\qquad\qquad\qquad\quad x < 1\\
+2 \left(1 -\frac{2}{x^2}\right) \qquad for\ 1 \leqslant x \leqslant 2 \\
+1 \qquad \qquad\qquad\qquad otherwise
+\end{cases}
+$$
+
+Write the set of four R functions and plot the pdf and cdf, respectively.
+```{r}
+dprob2 <- function(x) {
+  temp2 <- ifelse ( x<=2 & x>=1 , 2/(x^2), 0 )
+  return(temp2)
+  }
+
+pprob2 <- function(x) {
+  temp2cdf <- ifelse ( x<=1, 0, ifelse(x<2 , 2*(1-1/x) , 1) )
+  return(temp2cdf) 
+  }
+
+rprob2 <- function(n) {
+  us <- runif(n)
+  temp2.r <- (2/(2-us))
+  return(temp2.r)
+  } 
+
+qprob2 <- function(p) {
+  temp2.q <- (2/(2-p))
+  return(temp2.q)
+}
+
+
+```
+```{r}
+x <- seq(1,2, 0.01)
+
+plot(x, dprob2(x), main = "pdf and cdf of the just defined distribution", col = "red", ylim = c(0,2.5), ylab = "prob", type = 'l')
+points(x, pprob2(x), col = "blue", type = 'l')
+legend( x = "top", c("pdf", "cdf") , col = c("red", "blue"), lty=1,  inset = 0.05)
+
+```
+
+Determine the probability that tires will last less than 15000 km
+```{r}
+message(sprintf("Probability that tires will last less than 15000 km is: %.2f ", pprob2(1.5)))
+```
+Sample 3000 random variables from the distribution and determine the mean value and the variance, using the expression $$Var(X) = E[X^2] − E[X]^2$$
+```{r}
+sample2 <- rprob2(3000)
+  
+integral.2 <- integrate( function(x) { 2/(x^2)*x } , 1 , 2)
+message(sprintf("Mean from theory is: %.2f", integral.2$value))
+
+E.X <- mean(sample2)
+message(sprintf("Mean from sampling is: %.2f", E.X))
+
+E.X2 <- mean(sample2*sample2)
+VarX <- E.X2-(E.X)*(E.X)
+message(sprintf("Variance from sampling is: %.2f", sqrt(E.X2)))
+
+```
+
+## Exercise 3
+
+Markov’s inequality represents an upper boud to probability distributions:
+$$
+P (X ≥ k) ≤ \frac{E[X]}{k} \quad for \ k>0
+$$
+Having we defined a function:
+$$
+G(k) = 1 − F (k) ≡ P (X ≥ k)
+$$
+Plot G(k) and the Markov’s upper bound for:
+  + The exponential, Exp(λ = 1), distribution function
+  + The uniform, U (3, 5), distribution function
+  + The binomial, Bin(n = 1, p = 1/2), distribution function
+  + A Poisson, Pois(λ = 1/2), distribution function
+```{r}
+
+
+curve((1 - pexp( x , rate = 1)), from = 0, to = 12, col = "firebrick", ylab = "G(x)", main = "G(x) for exponential", ylim = c(0,3))
+curve( 1/x , from = 0, to = 12, add = TRUE, col = 'chartreuse4')
+legend( x = "top", c("pdf", "Markov's bound") , col = c("firebrick", "chartreuse4"), lty=1,  inset = 0.05)
+
+curve((1 - punif(x,3,5)), from = 3, to = 5, col = "firebrick", ylab = "G(x)", main = "G(x) for uniform(3,5)", ylim = c(0,1.5))
+curve( 4/x , from = 3, to = 5, add = TRUE, col = 'chartreuse4')
+legend( x = "topright", c("pdf", "Markov's bound") , col = c("firebrick", "chartreuse4"), lty=1,  inset = 0.05)
+
+curve((1 - pbinom(x, size = 1, prob = 1/2)), from = 0, to = 12, col = "firebrick", ylab = "G(x)", main = "G(x) for binomial ( n=1, p= 0.5)", ylim = c(0,3))
+curve( 0.5/x , from = 0, to = 12, add = TRUE, col = 'chartreuse4')
+legend( x = "top", c("pdf", "Markov's bound") , col = c("firebrick", "chartreuse4"), lty=1,  inset = 0.05)
+
+curve((1 - ppois( x , lambda = 1/2)), from = 0, to = 6, col = "firebrick", ylab = "G(x)", main = "G(x) for Poissonian (lambda=0.5)", ylim = c(0, 3))
+curve( 1/(2*x) , from = 0, to = 6, add = TRUE, col = 'chartreuse4')
+legend( x = "top", c("pdf", "Markov's bound") , col = c("firebrick", "chartreuse4"), lty=1,  inset = 0.05)
+```
+
+## Exercise 4
+
+Chebyshev’s inequality tells us that:
+$$
+P ( |X − μ| ≥ kσ) ≤ \frac{1}{k^2}
+$$
+which can be rewritten as:
+$$
+P ( |X − μ| < kσ) ≥ 1 − \frac{1}{k^2}
+$$
+Use R to show, with a plot, that Chebyshev’s inequality is is an upper bound to the following distributions:
+
+  + a normal distribution, N(μ = 3, σ = 5)
+  + an exponential distribution, Exp(λ = 1)
+  + a uniform distribution U (1 −√2, 1 + √2)
+  + a Poisson, Pois(λ = 1/3), distribution function
+
+```{r}
+
+curve(pnorm((5*x+3),3,5) - pnorm((3-5*x),3,5), 0, 10 , main = "Normal (mean = 3, sigma = 5)", col = "forestgreen",ylab= "")
+curve(1-1/x^2, 0, 10, add=TRUE, col = 'deeppink')
+legend( x = "right", c("pdf", "Chebyshev's bound") , col = c("forestgreen", "deeppink"), lty=1,  inset = 0.05)
+
+curve((pexp(1+x, rate = 1) - pexp( 1-x , rate = 1)), from = 0, to = 12, col = "forestgreen", main = "exponential (rate=1)",ylab= "")
+curve( 1- 1/(x^2) , from = 0, to = 12, add = TRUE, col = 'deeppink')
+legend( x = "right", c("pdf", "Chebyshev's bound") , col = c("firebrick", "deeppink"), lty=1,  inset = 0.05)
+
+curve(punif( 2*x/3 + 1 , 1-sqrt(2), 1+sqrt(2)) - punif( -2*x/3 + 1 , 1-sqrt(2), 1+sqrt(2)), from = 0, to = 12, col = "forestgreen", main = "unif (1-sqrt2, 1+sqrt2)", ylab= "")
+curve( 1- 1/(x^2) , from = 0, to = 12, add = TRUE, col = 'deeppink')
+legend( x = "right", c("pdf", "Chebyshev's bound") , col = c("forestgreen", "deeppink"), lty=1,  inset = 0.05)
+
+plot( (0:5) , ppois((0:5)*(1/3) + 1/3, 1/3) , col = "forestgreen", main = "poisson (rate=1/3)", ylab= "", type = 'b')
+curve( 1- 1/(x^2) , from = 0, to = 6, add = TRUE, col = 'deeppink')
+legend( x = "bottomright", c("pdf", "Chebyshev's bound") , col = c("forestgreen", "deeppink"), lty=1,  inset = 0.05)
+```
+
+
+
+
+

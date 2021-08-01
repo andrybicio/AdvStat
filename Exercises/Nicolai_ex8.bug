@@ -1,0 +1,17 @@
+model {
+
+	#mu needs to be inside because it changes during the iteration
+
+	# data likelihood
+	for (i in 1:N) {
+		log_mu[i] <- (b0 + b1*step(i-tau))
+		D[i] ~ dpois( exp(log_mu[i]) )
+	}
+
+	#priors uniform 
+	b0 ~ dunif(-2, 2);
+	b1 ~ dunif(-2, 2);
+	tau ~ dunif(1, N);
+
+
+}

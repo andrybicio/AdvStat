@@ -1,0 +1,506 @@
+---
+title: "Nicolai_ex7"
+author: "Andrea Nicolai"
+date: "27/5/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+Exercise 1
+
+a researcher has collected n = 15 observations that are supposed to come from a Normal distribution
+with known variance $\sigma^2$ = 16:
+```{r}
+observations <- c(26.8, 31.9, 28.0, 26.3, 28.5, 18.6, 28.3, 27.2, 22.3, 28.5, 20.9, 25.0, 16.3, 27.5, 31.5)
+n <- length(observations)
+sigma_sq <- 16
+sigma <- sqrt(sigma_sq)
+```
+Assuming a normal prior for $\mu$: $Norm(m = 20, s^2 = 25)$,
+
+(a) determine the posterior distribution $P(\mu | y_1, ..., y_{15} )$ and find the posterior mean and standard deviation.
+
+Analytically we know that:
+```{r}
+
+s_sq <- 25
+s <- sqrt(s_sq)
+mu_prior <- 20
+
+sigma_posterior1 <- sqrt((s_sq*sigma_sq)/(sigma_sq+n *s_sq))
+    
+mu_posterior1 <- mu_prior*((1/s_sq)/(n/sigma_sq + 1/s_sq)) + mean(observations)*(n/sigma_sq)/(n/sigma_sq + 1/s_sq)
+sprintf("Posterior distribution is such that Norm(mu = %.1f, std = %.1f)", mu_posterior1, sigma_posterior1)
+```
+
+
+(b) find the 95% credibility interval for $\mu$.
+It will be indeed the interval whose left and right tails have an integral of $2\cdot2.5\%$
+```{r}
+
+sprintf("95%% credibility interval will be [ %.1f ,  %.1f ] ",qnorm(0.025, mu_posterior1, sigma_posterior1), qnorm(0.975, mu_posterior1, sigma_posterior1))
+
+```
+
+(c) plot the posterior distribution, indicating on the same plot: the mean value, the standard deviation, and the 95% credibility interval
+```{r}
+
+x <- seq(from = 20, to = 30, by = 0.01)
+plot(x, dnorm(x, mu_posterior1, sigma_posterior1), xlab = expression(mu), ylab = 'p', lwd = 2, col = 'darkolivegreen3', type = 'l')
+#abline (v= qnorm(0.025, mu_posterior, sigma_posterior) , col = 'black' , lty=2)
+#abline (v= qnorm(0.975, mu_posterior, sigma_posterior) , col = 'black' , lty=2)
+abline (v = mu_posterior1 , col = 'gold3' , lty=2)
+
+lower1 <- seq(20, qnorm(0.025, mu_posterior1, sigma_posterior1), by = 0.01)
+lower_lim1 <- c(20, lower1, qnorm(0.025, mu_posterior1, sigma_posterior1) + 0.01)
+
+upper1 <- seq(qnorm(0.975, mu_posterior1, sigma_posterior1), 30, by = 0.01)
+upper_lim1 <- c(qnorm(0.975, mu_posterior1, sigma_posterior1), upper1 , 30)
+polygon(lower_lim1, c(0, dnorm(lower1, mu_posterior1, sigma_posterior1), 0), col="deepskyblue4", border=NA)
+polygon(upper_lim1, c(0, dnorm(upper1, mu_posterior1, sigma_posterior1), 0), col="deepskyblue4", border=NA)
+
+lines(x, dnorm(x, mu_prior, s), col = 'dodgerblue4', lty=4)
+
+text(x = 20, y = 0.38 , col="firebrick2 ", lwd = 2, pos=4, paste(expression(mu), sprintf( "%.1f",mu_posterior1),  sep=" = "))
+text(x = 20, y = 0.35 , col="firebrick2 ", lwd = 2, pos=4, paste(expression(sigma), sprintf( "%.1f", sigma_posterior1) , sep=" = "))
+text(x = 20, y = 0.32 , col="firebrick2 ", lwd = 2, pos=4, paste(sprintf("95%% CI [ %.1f ,  %.1f] ",qnorm(0.025, mu_posterior1, sigma_posterior1), qnorm(0.975, mu_posterior1, sigma_posterior1))))
+
+legend("topright", inset = 0.05 , c("Posterior", 'prior', 'mean'), col = c('darkolivegreen3', 'dodgerblue4', 'gold3') , lwd = c(2,1,1), lty = c(1,4,2))
+```
+
+(d) repeat the analysis using a different prior $Norm(m = 30, s^2 = 16)$ and plot, on the same graph the likelihood, the prior and the posterior.
+```{r}
+
+s_sq <- 16
+s <- sqrt(s_sq)
+mu_prior <- 30
+
+sigma_posterior2 <- sqrt((s_sq*sigma_sq)/(sigma_sq+n *s_sq))
+    
+mu_posterior2 <- mu_prior*((1/s_sq)/(n/sigma_sq + 1/s_sq)) + mean(observations)*(n/sigma_sq)/(n/sigma_sq + 1/s_sq)
+sprintf("Posterior distribution is such that Norm(mu = %.1f, std = %.1f)", mu_posterior2, sigma_posterior2)
+
+sprintf("95%% credibility interval will be [ %.1f ,  %.1f ] ",qnorm(0.025, mu_posterior2, sigma_posterior2), qnorm(0.975, mu_posterior2, sigma_posterior2))
+
+
+x <- seq(from = 20, to = 30, by = 0.01)
+plot(x, dnorm(x, mu_posterior2, sigma_posterior2), xlab = expression(mu), ylab = 'p', lwd = 2, col = 'darkolivegreen3', type = 'l')
+#abline (v= qnorm(0.025, mu_posterior, sigma_posterior) , col = 'black' , lty=2)
+#abline (v= qnorm(0.975, mu_posterior, sigma_posterior) , col = 'black' , lty=2)
+abline (v = mu_posterior2 , col = 'gold3' , lty=2)
+
+lower2 <- seq(20, qnorm(0.025, mu_posterior2, sigma_posterior2), by = 0.01)
+lower_lim2 <- c(20, lower2, qnorm(0.025, mu_posterior2, sigma_posterior2) + 0.01)
+
+upper2 <- seq(qnorm(0.975, mu_posterior2, sigma_posterior2), 30, by = 0.01)
+upper_lim2 <- c(qnorm(0.975, mu_posterior2, sigma_posterior2), upper2 , 30)
+polygon(lower_lim2, c(0, dnorm(lower2, mu_posterior2, sigma_posterior2), 0), col="firebrick2", border=NA)
+polygon(upper_lim2, c(0, dnorm(upper2, mu_posterior2, sigma_posterior2), 0), col="firebrick2", border=NA)
+
+lines(x, dnorm(x, mu_prior, s), col = 'dodgerblue4', lty=4)
+
+text(x = 20, y = 0.38 , col="firebrick2 ", lwd = 2, pos=4, paste(expression(mu), sprintf( "%.1f",mu_posterior2),  sep=" = "))
+text(x = 20, y = 0.35 , col="firebrick2 ", lwd = 2, pos=4, paste(expression(sigma), sprintf( "%.1f", sigma_posterior2) , sep=" = "))
+text(x = 20, y = 0.32 , col="firebrick2 ", lwd = 2, pos=4, paste(sprintf("95%% CI [ %.1f ,  %.1f] ",qnorm(0.025, mu_posterior2, sigma_posterior2), qnorm(0.975, mu_posterior2, sigma_posterior2))))
+
+legend("topright", inset = 0.05 , c("Posterior", 'prior', 'mean'), col = c('darkolivegreen3', 'dodgerblue4', 'gold3') , lwd = c(2,1,1), lty = c(1,4,2))
+
+```
+
+(e) compare the credibility intervals obtained with the two priors.
+Both 95% credibility intervals are centered around the mean with a $\mu \pm 0.2$, no matter how the prior was. This is because sigma is the same one, and so the two normals have got the same shape, therefore the credibility intervals must "coincide" besides a rigid shifting due to the change of the mean value.
+```{r}
+
+sprintf("Using the FIRST PRIOR Norm(mu = %.1f, std = %.1f)", 20, 5)
+sprintf("Posterior distribution is such that Norm(mu = %.1f, std = %.1f)", mu_posterior1, sigma_posterior1)
+sprintf("95%% credibility interval will be [ %.1f ,  %.1f ] ",qnorm(0.025, mu_posterior1, sigma_posterior1), qnorm(0.975, mu_posterior1, sigma_posterior1))
+
+sprintf("#########################################################################")
+
+sprintf("Using the SECOND PRIOR Norm(mu = %.1f, std = %.1f)", 30, 5)
+sprintf("Posterior distribution is such that Norm(mu = %.1f, std = %.1f)", mu_posterior2, sigma_posterior2)
+sprintf("95%% credibility interval will be [ %.1f ,  %.1f ] ",qnorm(0.025, mu_posterior2, sigma_posterior2), qnorm(0.975, mu_posterior2, sigma_posterior2))
+
+
+```
+
+
+Exercise 2
+
+A researcher has collected $n = 16$ observations that are supposed to come from a Normal distribution with known variance $\sigma^2 = 4$:
+```{r}
+observations <- c(4.09, 4.79, 4.68, 4.49, 1.87, 5.85, 2.62, 5.09, 5.58, 2.40, 8.68, 6.27, 4.07, 6.30, 4.78, 4.47)
+```
+
+assuming the prior is a step funtion:
+$$
+g(\mu) = 
+\begin{cases}
+\mu & 0 < \mu \leqslant 3\\
+3 & 3 < \mu \leqslant 5\\
+8-\mu & 5 < \mu \leqslant 8\\
+0 & \mu > 8
+\end{cases}
+$$
+(a) find the posterior distribution, the posterior mean and standard deviation
+```{r}
+prior_exercise_2 <- function(vec) {
+  result <- c()
+  for (mu in vec) {
+    
+  if (0 < mu & mu <= 3) result <- c(result, mu)
+  else if (3 < mu & mu <= 5) result <- c(result,3)
+  else if (5 < mu & mu <= 8) result <- c(result,8 - mu)
+  else result <- c(result, 0)
+  
+  }
+return (result)
+}
+
+normaliz_factor <- integrate(prior_exercise_2, 0, 8)$value
+
+prior_exercise_2 <- function(vec) {
+  result <- c()
+  for (mu in vec) {
+    
+  if (0 < mu & mu <= 3) result <- c(result, mu)
+  else if (3 < mu & mu <= 5) result <- c(result,3)
+  else if (5 < mu & mu <= 8) result <- c(result,8 - mu)
+  else result <- c(result, 0)
+  
+  }
+return (result/normaliz_factor)
+}
+
+```
+
+
+```{r}
+
+
+x <- seq(0, 8, by = 0.01)
+delta.p <- 0.01
+
+EX <- delta.p*sum(x*prior_exercise_2(x))
+EX2 <-  delta.p*sum(x*x*prior_exercise_2(x))
+std <- sqrt(EX2 - EX*EX)
+
+
+plot(x, prior_exercise_2(x), type = 'l', col = 'black', lwd = 2, main = 'Prior', xlab = expression(mu), ylab = 'p')
+
+likelihood_exercise2 <- function(x, mu = EX, sigma = std) {
+  return ( dnorm(x, mu, sigma) )
+} 
+
+posterior <- function(observations, func_likelihood, x) {
+  product <- 1
+  for (value in observations){
+    product <- product*func_likelihood(value, x)
+  }
+  return (product)
+}
+
+posterior_values_ex2 <- prior_exercise_2(x)*posterior(observations,likelihood_exercise2, x)
+normalization_factor <- delta.p*sum(posterior_values_ex2) 
+posterior_ex2_norm   <- posterior_values_ex2/normalization_factor
+
+EX_post  <- delta.p*sum(x*posterior_ex2_norm)
+EX2_post <- delta.p*sum(x*x*posterior_ex2_norm)
+std_post <- sqrt(EX2_post - EX_post^2)
+
+
+plot(x, posterior_ex2_norm, type = 'l', col = 'darkorange1', lwd = 3, lty = 4 ,main = 'Posterior + Normal approximation', xlab = expression(mu),ylab = expression(paste("p( ", mu, " | D)")), ylim = c(0,1))
+lines(x, dnorm(x,EX_post,std_post), col = 'darkred', lwd = 1, lty = 3 )
+
+legend("topleft", inset = 0.05 , c("posterior", 'normal approximation'), col = c('darkorange1', 'darkred') , lwd = c(3,1), lty = c(4,3))
+```
+
+(b) find the 95% credibility interval for $\mu$.
+As we can easily see from the graph above, we can approximate our posterior with a $Norm(\mu = \mu_{post}, \sigma = sd_{post})$ without noting any sensible difference and thus simplifying our calculations:
+```{r}
+
+sprintf("Posterior distribution is such that Norm(mu = %.2f, std = %.2f)", EX_post, std_post)
+sprintf("95%% credibility interval will be [ %.2f ,  %.2f ] ",qnorm(0.025, EX_post, std_post), qnorm(0.975, EX_post, std_post))
+
+```
+
+(c) plot the posterior distribution, indicating on the same plot: the mean value, the standard deviation, and the 95% credibility interval
+```{r}
+lower <- seq(0, qnorm(0.025, EX_post, std_post), by = 0.01)
+upper <- seq(qnorm(0.975, EX_post, std_post), 8, by = 0.01)
+
+lower_lim <- c(0, lower, qnorm(0.025, EX_post, std_post) + 0.01)
+upper_lim <- c(qnorm(0.975, EX_post, std_post), upper , 8)
+
+
+plot(x, dnorm(x,EX_post,std_post), type = 'l', col = 'darkred', lwd = 3, lty = 4 ,main = 'Posterior', xlab = expression(mu), ylab = expression(paste("p( ", mu, " | D)")), ylim = c(0,1))
+
+polygon(lower_lim, c(0, dnorm(lower, EX_post, std_post), 0), col="darkorange1", border=NA)
+polygon(upper_lim, c(0, dnorm(upper, EX_post, std_post), 0), col="darkorange1", border=NA)
+text(x = 0, y = 1 , col="darkred ", lwd = 2, pos=4, paste(expression(mu), sprintf( "%.2f",EX_post),  sep=" = "))
+text(x = 0, y = 0.92 , col="darkred ", lwd = 2, pos=4, paste(expression(sigma), sprintf( "%.2f", std_post) , sep=" = "))
+text(x = 0, y = 0.84 , col="darkred ", lwd = 2, pos=4, paste(sprintf("95%% CI [ %.2f ,  %.2f] ",qnorm(0.025, EX_post, std_post), qnorm(0.975, EX_post, std_post))))
+abline (v = EX_post , col = 'gold3' , lty=2)
+
+```
+
+(d) plot, on the same graph, the prior, the likelihood and the posterior distribution
+```{r}
+plot(x, prior_exercise_2(x), type = 'l', col = 'blue', lwd = 1, lty = 4 ,main = 'Prior + Likelihood + Posterior', xlab = expression(mu), ylab = 'p', ylim = c(0,1))
+lines(x, likelihood_exercise2(x, EX, std))
+lines(x, dnorm(x,EX_post,std_post), col = 'darkred', lty = 1, lwd = 3)
+
+legend("topright", inset = 0.05 , c("prior", 'likelihood', 'posterior'), col = c('blue', 'black', 'darkred') , lwd = c(1,1,3), lty = c(4,1,1))
+```
+
+Exercise 3
+
+A study on water quality of streams, a high level of bacter X was defined as a level greater than 100 per 100 ml of stream water. $n = 116$ samples were taken from streams having a high environmental impact on pandas. Out of these, $y = 11$ had a high bacter X level.
+Indicating with $p$ the probability that a sample of water taken from the stream has a high bacter X level,
+```{r}
+n <- 116
+y <- 11
+```
+
+
+(a) find the frequentist estimator for p
+```{r}
+p_freq   <-  y/n
+var_freq <- p_freq*(1-p_freq)/n 
+
+sprintf("Unbiased estimator for frequentist approach returns p = %.2f +- %.2f", p_freq, sqrt(p_freq) )
+```
+
+(b) using a Beta(1, 10) prior for p, calculate and posterior distribution $P(p|y)$
+```{r}
+alpha_prior3A <- 1
+beta_prior3A <- 10
+
+delta.p <- 0.01
+
+p <- seq(0, 1, by = delta.p)
+prior_ex3A <-  function(x){
+  return (dbeta(x, shape1 = alpha_prior3A, shape2 = beta_prior3A))
+}
+
+
+
+likelihood_ex3A <- function(p) {
+  return (dbinom(x = y, size = n, prob = p))
+}
+
+norm_likelihood <- integrate(likelihood_ex3A, lower = 0, upper = 1)$value
+
+likelihood_ex3A_norm <- function(p) {
+  return (dbinom(x = y, size = n, prob = p)/norm_likelihood)
+}
+
+
+
+alpha_post3A <- alpha_prior3A + y
+beta_post3A <- beta_prior3A + n - y
+
+posterior_ex3A <- function(x) {
+  return(dbeta(x, shape1 = alpha_post3A , shape2 = beta_post3A))
+}
+
+mean_3A <- (alpha_post3A)/(alpha_post3A + beta_post3A)
+mode_3A <- (alpha_post3A - 1)/(alpha_post3A + beta_post3A - 2)
+std_3A  <- (alpha_post3A*beta_post3A)/(((alpha_post3A + beta_post3A)^2)*(alpha_post3A + beta_post3A + 1))
+
+plot(p, prior_ex3A(p), type = 'l', main = "Prior, likelihood, posterior", col = 'darkslateblue', lty = 4, lwd = 2, ylim = c(0,15.4), ylab = "density")
+lines(p,likelihood_ex3A_norm(p), col = 'chocolate3', lwd = 2, lty = 3)
+lines(p, posterior_ex3A(p), col = 'chartreuse3', lwd = 3)
+
+legend("topright", inset = 0.05 , c("prior", 'likelihood', 'posterior'), col = c('darkslateblue', 'chocolate3', 'chartreuse3') , lwd = c(2,2,3), lty = c(4,3,1))
+```
+  
+(c) find the bayesian estimator for $p$, the posterior mean and variance, and a 95% credible interval
+```{r}
+
+sprintf("Bayesian estimator for p = %.2f  +- %.2f", mean_3A, sqrt(std_3A))
+sprintf("95%% credibility interval is [ %.2f , %.2f ]", qbeta(0.025, alpha_post3A , beta_post3A) , qbeta(0.975, alpha_post3A , beta_post3A))
+
+```
+
+(d)a test the hypotesis
+$H_◦: p = 0.1$ vs $H_1 : p \neq 0.1$
+at 5% level of significance with the frequentist approach
+We use the two-sided hypothesis
+```{r}
+values <- 0:20
+
+barplot(dbinom(values, n, prob = 0.1), xlab = "values", ylab = 'p(x)', main = 'Null hypothesis testing - Frequentist approach', col = 'darkorange1', density = 35, names.arg = values, cex.names=.82)
+abline(h = 0.05, col = 'red')
+barplot(c(0,0,0,0,0,0,0,0,0,0,0,dbinom(11, n, prob = 0.1)), add = TRUE, col = 'darkgreen')
+
+sprintf("We see that our null hypothesis lies in our acceptance region (for y = 11). Then we do not reject our Hypothesis, and measurements may have been caused by chance. We can state this with 5%% of significance level.")
+```
+
+(d)b test the hypotesis
+$H_◦: p = 0.1$ vs $H_1 : p \neq 0.1$
+at 5% level of significance with bayesian approach.
+```{r}
+#we take the posterior and integrate up to p_0 = 0.1
+P_test_hyp <- dbeta(0.10, shape1 = alpha_prior3A, shape2 = beta_prior3A)
+
+sprintf("Using Beta(1,10) as a prior, the bayesian estimator for p = %.2f  +- %.2f. 95%% credibility interval is [ %.2f , %.2f ] ", mean_3A, sqrt(std_3A), qbeta(0.025, alpha_post3A , beta_post3A) , qbeta(0.975, alpha_post3A , beta_post3A))
+
+sprintf("We see that the null hypothesis p_0 = 0.10 lies inside the credibility interval, and so the model underlying may be the one we have been testing, for which p_0 = 0.10 at 5%% significance level.")
+
+```
+
+
+
+A new measurement, performed one month later on $n = 165$ water samples, gives $y = 9$ high bacter X level
+```{r}
+n_new <- 165
+y_new <- 9
+```
+
+(e) find the frequentist estimator for p
+```{r}
+p_freq_new   <-  y_new/n_new
+var_freq_new <- p_freq_new*(1-p_freq_new)/n_new 
+
+sprintf("Unbiased estimator for frequentist approach returns p = %.2f +- %.2f", p_freq_new, sqrt(var_freq_new) )
+```
+
+(f)a find a bayesian estimator for p assuming both a Beta(1, 10) prior for p
+```{r}
+alpha_prior3B <- 1
+beta_prior3B <- 10
+
+delta.p <- 0.01
+
+p <- seq(0, 1, by = delta.p)
+prior_ex3B <-  function(x){
+  return (dbeta(x, shape1 = alpha_prior3B, shape2 = beta_prior3B))
+}
+
+likelihood_ex3B <- function(p) {
+  return (dbinom(x = y_new, size = n_new, prob = p))
+}
+
+norm_likelihood_B <- integrate(likelihood_ex3B, lower = 0, upper = 1)$value
+
+likelihood_ex3B_norm <- function(p) {
+  return (dbinom(x = y_new, size = n_new, prob = p)/norm_likelihood_B)
+}
+
+alpha_post3B <- alpha_prior3B + y_new
+beta_post3B <- beta_prior3B + n_new - y_new
+
+posterior_ex3B <- function(x) {
+  return(dbeta(x, shape1 = alpha_post3B , shape2 = beta_post3B))
+}
+
+mean_3B <- (alpha_post3B)/(alpha_post3B + beta_post3B)
+mode_3B <- (alpha_post3B - 1)/(alpha_post3B + beta_post3B - 2)
+std_3B  <- (alpha_post3B*beta_post3B)/(((alpha_post3B + beta_post3B)^2)*(alpha_post3B + beta_post3B + 1))
+
+plot(p, prior_ex3B(p), type = 'l', main = "Prior, likelihood, posterior", col = 'darkslateblue', lty = 4, lwd = 2, ylim = c(0,23), ylab = "density")
+lines(p,likelihood_ex3B_norm(p), col = 'chocolate3', lwd = 2, lty = 3)
+lines(p, posterior_ex3B(p), col = 'chartreuse3', lwd = 3)
+
+legend("topright", inset = 0.05 , c("prior Beta(1,10)", 'likelihood', 'posterior'), col = c('darkslateblue', 'chocolate3', 'chartreuse3') , lwd = c(2,2,3), lty = c(4,3,1))
+
+```
+
+(g)a find the bayesian estimator for p, the posterior mean and variance, and a 95% credible interval
+```{r}
+sprintf("Bayesian estimator for p = %.2f  +- %.2f", mean_3B, sqrt(std_3B))
+sprintf("95%% credibility interval is [ %.2f , %.2f ]", qbeta(0.025, alpha_post3B , beta_post3B) , qbeta(0.975, alpha_post3B , beta_post3B))
+```
+
+
+f(b) find a bayesian estimator for p, assuming the posterior probability of the older measurement as the prior for the new one.
+```{r}
+
+alpha_prior3Bbis <- alpha_post3A
+beta_prior3Bbis <- beta_post3A
+
+delta.p <- 0.01
+
+p <- seq(0, 1, by = delta.p)
+prior_ex3Bbis <-  function(x){
+  return (dbeta(x, shape1 = alpha_prior3Bbis, shape2 = beta_prior3Bbis))
+}
+
+likelihood_ex3B <- function(p) {
+  return (dbinom(x = y_new, size = n_new, prob = p))
+}
+
+norm_likelihood_B <- integrate(likelihood_ex3B, lower = 0, upper = 1)$value
+
+likelihood_ex3B_norm <- function(p) {
+  return (dbinom(x = y_new, size = n_new, prob = p)/norm_likelihood_B)
+}
+
+alpha_post3Bbis <- alpha_prior3Bbis + y_new
+beta_post3Bbis <- beta_prior3Bbis + n_new - y_new
+
+posterior_ex3Bbis <- function(x) {
+  return(dbeta(x, shape1 = alpha_post3Bbis , shape2 = beta_post3Bbis))
+}
+
+mean_3Bbis <- (alpha_post3Bbis)/(alpha_post3Bbis + beta_post3Bbis)
+mode_3Bbis <- (alpha_post3Bbis - 1)/(alpha_post3Bbis + beta_post3Bbis - 2)
+std_3Bbis  <- (alpha_post3Bbis*beta_post3Bbis)/(((alpha_post3Bbis + beta_post3Bbis)^2)*(alpha_post3Bbis + beta_post3Bbis + 1))
+
+plot(p, prior_ex3Bbis(p), type = 'l', main = "Prior, likelihood, posterior", col = 'darkslateblue', lty = 4, lwd = 2, ylim = c(0,25), ylab = "density")
+lines(p,likelihood_ex3B_norm(p), col = 'chocolate3', lwd = 2, lty = 3)
+lines(p, posterior_ex3Bbis(p), col = 'chartreuse3', lwd = 3)
+
+legend("topright", inset = 0.05 , c("prior (old posterior)", 'likelihood', 'posterior'), col = c('darkslateblue', 'chocolate3', 'chartreuse3') , lwd = c(2,2,3), lty = c(4,3,1))
+
+```
+
+
+```{r}
+sprintf("Bayesian estimator for p = %.2f  +- %.2f", mean_3Bbis, sqrt(std_3Bbis))
+sprintf("95%% credibility interval is [ %.2f , %.2f ]", qbeta(0.025, alpha_post3Bbis , beta_post3Bbis) , qbeta(0.975, alpha_post3Bbis , beta_post3Bbis))
+```
+
+```{r}
+plot(p, posterior_ex3Bbis(p), type = 'l', main = "Posteriors comparison", col = 'darkred', lty = 3, lwd = 3, ylim = c(0,25), ylab = expression(paste("p( ", p, " | y,n )")))
+lines(p, posterior_ex3B(p), col = 'orange1', lwd = 3,  lty = 3)
+
+legend("topright", inset = 0.05 , c("prior (Beta(1,10))", 'prior (old posterior)'), col = c('darkred', 'orange1') , lwd = c(3,3), lty = c(3,3))
+
+sprintf("Using Beta(1,10) as a prior, the bayesian estimator for p = %.2f  +- %.2f. 95%% credibility interval is [ %.2f , %.2f ] ", mean_3B, sqrt(std_3B), qbeta(0.025, alpha_post3B , beta_post3B) , qbeta(0.975, alpha_post3B , beta_post3B))
+sprintf("Using the old prior as posterior, the bayesian estimator for p = %.2f  +- %.2f. 95%% credibility interval is [ %.2f , %.2f ] ", mean_3Bbis, sqrt(std_3Bbis), qbeta(0.025, alpha_post3Bbis , beta_post3Bbis) , qbeta(0.975, alpha_post3Bbis , beta_post3Bbis))
+sprintf("We see as the two results slightly vary depending on the choice of the prior.")
+```
+
+(h)a test the hypotesis
+$H_◦: p = 0.1$ vs $H_1 : p \neq 0.1$
+at 5% level of significance with the frequentist approach
+```{r}
+#null hypothesis
+
+values <- 5:30
+
+barplot(dbinom(values, n_new, prob = 0.1), xlab = "values", ylab = 'p(x)', main = 'Null hypothesis testing - Frequentist approach', col = 'darkorange1', density = 35, names.arg = values, cex.names=.82)
+abline(h = 0.05, col = 'red')
+barplot(c(0,0,0,0,dbinom(9, n_new, prob = 0.1)), add = TRUE, col = 'red')
+
+tails_3B <- pbinom(values, n_new, prob = 0.1)
+
+sprintf("We see that our null hypothesis does not lie in our acceptance region (for y = 9). Then we do reject our Hypothesis, and so we can tell that p =/= 0.10 with 5%% of significance level.")
+```
+
+(h)b test the hypotesis
+$H_◦: p = 0.1$ vs $H_1 : p \neq 0.1$
+at 5% level of significance with the bayesian approach.
+
+We previously found our credibility interval that was: 
+```{r}
+sprintf("Using Beta(1,10) as a prior, the bayesian estimator for p = %.2f  +- %.2f. 95%% credibility interval is [ %.2f , %.2f ] ", mean_3B, sqrt(std_3B), qbeta(0.025, alpha_post3B , beta_post3B) , qbeta(0.975, alpha_post3B , beta_post3B))
+sprintf("Using the old prior as posterior, the bayesian estimator for p = %.2f  +- %.2f. 95%% credibility interval is [ %.2f , %.2f ] ", mean_3Bbis, sqrt(std_3Bbis), qbeta(0.025, alpha_post3Bbis , beta_post3Bbis) , qbeta(0.975, alpha_post3Bbis , beta_post3Bbis))
+```
+Since $p = 0.10$ lies inside this interval, we do not reject our hypothesis with 5% of significance level as we instead did for the frequentist approach. By the way, we note moreover that $p=0.10$ is an extremal point for the credibility interval using both priors.

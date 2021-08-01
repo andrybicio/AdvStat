@@ -1,0 +1,267 @@
+---
+title: "Nicolai_ex04"
+author: "Andrea Nicolai"
+date: "29/4/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Exercise 1
+
+The triangular distribution, in the interval (a, b), is given by the following:
+
+$$ f(X) = 
+\begin{cases} 
+
+\frac{2(x-a)}{(b-a)(c-a)} & a \leqslant x < c \\ 
+\frac{2(b-x)}{(b-a)(b-c)} & c \leqslant x \leqslant b\\
+0 & otherwise 
+\end{cases}
+$$ 
+
+where c ∈ [a, b].
+
+```{r}
+pdf1 <- function(x, a = 0, b = 1, c = 0.5) {
+  temp <- ifelse (  (x < c) & ( x >= a ),
+                   2*(x-a)/((b-a)*(c-a)),
+                   ifelse (  (c <= x) & ( x <= b),
+                            2*(b-x)/((b-a)*(b-c)),
+                            0) )
+  return(temp)
+}
+
+cdf1 <- function(x, a = 0, b = 1, c = 0.5) {
+  temp <- ifelse ( (x >= a) & ( x < c),
+                   ((x-a)^2)/((b-a)*(c-a)),
+                    ifelse ( (c <= x) & ( b >= x),
+                             1-((b-x)^2)/((b-a)*(b-c)),
+                             ifelse ( x > b, 1, 0)))
+  return(temp)
+}
+```
+plot the function, given the interval (a, b)
+```{r}
+curve(pdf1(x,1,6,4), from = 0, to = 6, ylab="pdf(x)", main = "Triangular distribution (a=1, b=6, c=2)" )
+curve(cdf1(x,1,6,4), from = 0, to = 6, ylab="cdf(x)", main = "Triangular distribution (a=1, b=6, c=2)" )
+```
+write an algorithm to generate random numbers from the triangular distribution
+```{r}
+random.1 <- function(n = 10000, a = 0, b = 1, c = 0.5) {
+  func.max <- pdf1(c, a, b, c)
+         u.1 <- runif(n, a , b)
+         u.2 <- runif(n)
+         y <- ifelse(u.2*func.max < pdf1(u.1, a, b, c), u.1, NA)
+         y.clean <- y[!is.na(y)]
+  return(y.clean)
+}
+```
+
+generate 10^4 random number from the distribution, show them in an histogram and superimpose
+the analytical curve
+
+```{r}
+x1 <- random.1(10^4,1,6,4)
+while (length(x1) < 10^4){
+  x1 <- c( x1, random.1(1,1,6,4))
+}
+
+curve(pdf1(x,1,6,4), from = 0, to = 6, ylab="pdf(x)", main = "Triangular distribution (a=1, b=6, c=2)", )
+hist(x1, freq=F, col = 'firebrick3', density = 30 ,add=T)
+```
+
+
+
+Exercise 2
+
+Given a discrete probability distribution, defined by the following probabilities: 
+0.05, 0.19, 0.14, 0.17, 0.02, 0.11, 0.06, 0.05, 0.04, 0.17
+
+```{r}
+x2 <- c(0.05, 0.19, 0.14, 0.17, 0.02, 0.11, 0.06, 0.05, 0.04, 0.17)
+
+pdf2 <- function (x) {
+ return(x2[floor(x)]) 
+}
+
+cdf2 <- function (x) {
+  index <- floor(x)
+  t1 <- x2[1:index]
+  return( sum(t1) )
+}
+```
+
+
+
+Plot the probability density function and the cumulative density function
+```{r}
+barplot(x2, main="pdf", names=x2, col = 'blueviolet', density = 24, ylab = 'prob')
+
+y2 <- sapply(1:10, cdf2)
+barplot(y2, names = expression("x"[1],"x"[2],"x"[3],"x"[4],"x"[5],"x"[6],"x"[7],"x"[8],"x"[9],"x"[10]),
+        main="cdf", col = 'gold3', density = 18, ylab ='cumulative probability' )
+```
+
+Write an algorithm to generate random numbers from the discrete probability distribution
+```{r}
+random2 <- function (n) {
+  vec <- 1:10
+  x.2 <- c(NA)
+  cumulative <- sapply(1:10, cdf2)
+  
+  while (length(x.2) < n+1) {
+  u.2 <- runif(1)
+  index <- length(cumulative[cumulative < u.2]) + 1
+  ifelse ( index==1, y2 <- u.2/vec[index] , y2 <- vec[index -1 ] + (u.2 - cdf2(index -1 ))/pdf2(index))
+  x.2 <- c(x.2,y2)}
+  
+  return(x.2[!is.na(x.2)])
+}
+
+sampled2 <- random2(10000)
+sampled_norm <- 0.2*sampled2/max(sampled2)
+barplot( x2 ,names = x2, main="pdf", col = 'blue4', density = 45)
+hist(sampled_norm, xlab = 'Discrete sampling' ,  freq = FALSE, main = "sampled", breaks = 10, col = 'blue3', density = 45)
+
+```
+
+Exercise 3
+
+Generate random variables from the following distribution
+$$
+
+f(X) = \frac{2}{\pi R^2} \sqrt{R^2 - x^2}
+$$
+where −R ≤ x ≤ R.
+
+Using the acceptance-rejection algorithm, assume M = 2/(πR) and generate 10 ^ random variables,
+plotting them in an histogram.
+
+```{r}
+#The distribution we are requested to implement is:
+distrib3 <- function (x , R = 1) {
+ tmp <- ifelse ( (x >= -R) & (x <= R), 2/(pi*R^2)*sqrt(R^2-x^2), NA)
+ return(tmp)
+}
+
+
+#Acceptance rejection method algorithm
+acc.rej <- function( n = 10^4 , R = 1 ) {
+  u.1 <- runif(n, -R, R )
+  u.2 <- runif(n)
+  Max.f <- 2/(pi*R)
+  y <- ifelse ( u.2*Max.f < distrib3(u.1,R) , u.1 , NA )
+  y.clean <- y[!is.na(y)]
+  return(y.clean)
+}
+
+#Generate 10^4 samples
+x3 <- acc.rej(10^4)
+while (length(x3) < 10^4){
+  x3 <- c( x3, acc.rej(1))
+}
+
+#Make plots
+curve(distrib3(x), from = -1, to = 1, ylab="pdf(x)", ylim = c(0, 0.7), col = 'firebrick2' )
+hist(x3, freq=F, col = 'gold3', density = 30 ,add=T)
+legend('topright', 'pdf', inset = 0.05, lty = 1, col = 'firebrick2')
+```
+
+Exercise 4
+An important property of the gamma distribution is the so-called \textit{reproductive property}. It states that given a sequence of independent random variable X_j ∼ Gamma(α_j , β), it follows that:
+$$
+Y = \sum_{j=1}^n X_j \rightarrow Y \sim Gamma(\alpha, \beta) \qquad where\quad \alpha = \sum_{j=1}^n \alpha_j 
+$$
+
+if α = m is an integer, a random variable from gamma distribution Gamma(m, β) (also known
+as Erlang distribution) can be obtained by summing m independent exponential random variables
+X_j ∼ Exp(β):
+
+$$
+Y = \beta \sum_{j=1}^n (- ln\ U_j) = -\beta\ ln \prod_{j=1}^n U_j
+$$
+Write an algorithm to sample variables from an Erlang distribution Gamma(m, β):
+```{r}
+
+#define the Gamma distribution
+r.gamma <- function( alpha, beta,  n = 1000 ) {
+  expon <-  replicate(n, 0)
+  for (index in 1:alpha) {
+    u.5 <- runif(n)
+    expon <- (expon - beta*log(u.5))
+  }
+  return(expon)
+}
+
+x.4 <- r.gamma (4,5)
+hist(x.4, freq = FALSE, ylim = c(0, 0.06),  col = 'gold3', density = 30, main = "Gamma(4, 1/5)")
+curve(dgamma(x,4,1/5), add = T, from = 0, to = 80, ylab= "pdf", main= "Gamma(4, 1/5)", col = 'blue3')
+legend('topright', 'pdf gamma (4,1/5)', inset = 0.05, lty = 1, col = 'blue3')
+
+y.4 <- r.gamma (6,2)
+curve(dgamma(x,6,1/2), from = 0, to = 150, ylab= "pdf", main= "Gamma(6, 1/2)",ylim = c(0, 0.1), col = 'blue3')
+hist(y.4, freq = FALSE, add = T, col = 'gold3', density = 30)
+legend('topright', 'pdf gamma (6,2)', inset = 0.05, lty = 1, col = 'blue3')
+
+z.4 <- r.gamma (2,8)
+hist(z.4, freq = FALSE,  main= "Gamma(2, 1/8)", ylim = c(0, 0.05),col = 'gold3', density = 30 )
+curve(dgamma(x,2,1/8), add = T, from = 0, to = 80, col = 'blue3')
+legend('topright', 'pdf gamma (2,1/8)', inset = 0.05, lty = 1, col = 'blue3')
+
+#Gamma(1,1) it is indeed the exponential as we expected!
+w.4 <- r.gamma (1,1)
+hist(w.4, freq = FALSE, ylim = c(0, 1),  col = 'gold3', density = 30, main = "Gamma(1,1) and exp(rate = 1)")
+curve(dgamma(x,1,1), add = T, from = 0, to = 8, ylab= "pdf", main= "Gamma(1, 1)", col = 'blue3', lty = 3, lw  = 2)
+curve(dexp(x,1), add = T, from = 0, to = 8, col = 'red3', lty = 2)
+legend('topright', c('pdf gamma (4,1/5)', 'exp(1)'), inset = 0.05, lty = c(3,2), col = c('blue3', 'red3'), lw = c(2,2))
+```
+
+Exercise 5
+One of the first random number generator was proposed by von Neumann, the so-called middle square algorithm. write R code to implement this type of generator and, given a fixed digit number input, square it an remove the leading and trailing digits, in order to return a number with the same number of digits as the original number. 
+Suggestion : after having squared the number, convert it to a list of characters
+\textit{(number <- unlist(strsplit(as.character(x.squared),"")))}
+and, after having removed the head and tail of the list, convert it back to a number
+\text{(as.numeric(paste(number.after.trimming, collapse="")))}
+
+```{r}
+# N = numbers to be generated
+# first = input number
+
+middle.square <- function (N, first) {
+  
+  #Check how many digits does the input number have
+  digits <- length(unlist(strsplit(as.character(first),"")))
+  
+  #check whether the number has odd or even number of digits and set parameters accordingly
+  if (digits%%2 == 0) {
+    a <- digits/2 + 1
+    b <- digits/2 + digits
+  }
+  if (digits%%2 == 1 ) {
+    a <- digits/2 + 1/2
+    b <- digits/2 + digits - 1/2
+  }
+  
+  numbers <- c(NA)
+  
+  #generate N numbers to be squared and then trimmed  
+  for (i in 1:N) {
+    ifelse (i == 1, 
+            temp <- first*first,
+            temp <- numbers[i]^2 )
+    
+    temp <- unlist(strsplit(as.character(temp),""))
+    temp <- temp[a:b]
+    temp <- as.numeric(paste(temp,collapse = ""))
+    numbers <- c(numbers, temp)
+    }
+  return(numbers[!is.na(numbers)])
+}
+
+middle.square(4,5772156649)
+
+
+```

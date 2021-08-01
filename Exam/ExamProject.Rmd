@@ -1,0 +1,494 @@
+---
+title: "Rt estimation"
+author: "Andrea Nicolai"
+date: "19/3/2021"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+Install the required packages for importing the data, from the site [site](https://covid19datahub.io/articles/api/r.html)
+```{r setup, include=FALSE}
+# install the packages
+#install.packages("COVID19")
+#install.packages("tinytex")
+#install.packages("tidyverse")
+#install.packages("cowplot")
+#install.packages("zoo")
+#install.packages("rjags", dependencies=TRUE, configure.args="--enable-rpath") 
+#install.packages("OpenImageR")
+#install.packages("waveslim")
+
+#remember to install "node.js" with apt install nodejs
+#install.packages("rstan, dependencies = TRUE")
+ 
+# load the package
+library("COVID19")
+library(lubridate, warn.conflicts = FALSE)
+library(dplyr, warn.conflicts = FALSE)
+library(ggplot2, warn.conflicts = FALSE)
+library(cowplot, warn.conflicts = FALSE)
+library(zoo, warn.conflicts = FALSE)
+library("tinytex")
+library("readr")
+library("tidyr")
+library("waveslim")
+library("rstan")
+```
+
+# Small presentation about the project
+
+Rt is a really important quantity to track during an epidemics, since many policies are taken according to it. In this work we present an alternative way, with respect to Cori et al. and Wallinga et al.'s methods, based on Bayesian inference to extract Rt. Indeed this work is based on [Bettencourt & Ribeiro](https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0002185), which was made popular thanks to [rtlive](https://rtlive.de/): the very first results presented in the latter site were based on it. We will try to work with Italian data, and estimate the $R_t$ from March 2020 through the end of April 2021. 
+
+
+Load Italian national data ("administration level" is set to 1), already preprocessed for an optimal analysis.
+Special thanks to:
+  Guidotti, E., Ardia, D., (2020), "COVID-19 Data Hub", Journal of Open Source Software 5(51):2376, doi:
+  10.21105/joss.02376.
+
+Filter and subset the data that matches the condition to be later than Feb, 24th. In addition, keep only columns such as "date", number of "tests" taken in the country, "recovered" and finally the "confirmed" number of cases. First column "id" is to keep in mind we are working with italian data.
+```{r}
+Italian_data <- covid19("Italy", level = 1, verbose = FALSE)
+Italian_data <- Italian_data %>% filter(as_date(Italian_data$date) >= as_date("2020-02-24"))
+Italian_data <- Italian_data %>% filter(as_date(Italian_data$date) <= as_date("2021-05-01"))
+Italian_data <- Italian_data %>% select(id, date, tests, confirmed, recovered)
+
+#compute the daily quantities: confirmed and number of tests
+daily_confirmed <- diff(Italian_data$confirmed)
+daily_tests     <- diff(Italian_data$tests)
+
+#in order not to raise an error, drop the first row, so to keep records from 26th on and assign to database
+Italian_data <- Italian_data[-1,]
+Italian_data$daily_tests <- daily_tests
+Italian_data$daily_confirmed <- daily_confirmed
+
+#print the data
+Italian_data
+```
+
+Let us take a first glance at the data, cumulated ones:
+```{r}
+plotA <- ggplot(Italian_data, aes(date)) +  geom_line(aes(date, tests), colour="red") + ylab("Cumulated number of tests") + xlab("Date") + ggtitle("Cumulated number of tests") + theme(plot.title = element_text(hjust = 0.5)) 
+
+plotB <-ggplot(Italian_data, aes(date)) + geom_line(aes(date, confirmed), colour="blue") + ylab("Cumulated number of confirmed cases") + xlab("Date") + ggtitle("Cumulated number confirmed cases") + theme(plot.title = element_text(hjust = 0.5)) 
+
+plot_grid(plotA, plotB, labels = "AUTO")
+```
+
+Whereas now le us take a first glance at the data, daily ones. They can be obtained through "diff" function:
+```{r}
+plotA <- ggplot(Italian_data, aes(date)) +  geom_line(aes(date, daily_tests), colour="red") + ylab("Daily number of tests") + xlab("Date") + ggtitle("Daily number of tests") + theme(plot.title = element_text(hjust = 0.5)) 
+
+plotB <-ggplot(Italian_data, aes(date)) + geom_line(aes(date, daily_confirmed), colour="blue") + ylab("Daily number of confirmed cases") + xlab("Date") + ggtitle("Daily number confirmed cases") + theme(plot.title = element_text(hjust = 0.5)) 
+ggsave("ItaDaily.png")
+
+plot_grid(plotA, plotB, labels = "AUTO")
+```
+
+It can be seen that data needs to be filtered: indeed a one-week periodicity is present due to weekends effect (i.e. less tests are performed, there might be some delay in reporting cases etc...). 
+```{r}
+#function for apply the rolling average
+Italian_data <- Italian_data %>% mutate(daily_confirmed = rollmean(daily_confirmed, k = 7, fill = NA))
+Italian_data <- Italian_data %>% mutate(daily_tests = rollmean(daily_tests, k = 7, fill = NA))
+
+#expression for skipping rows with NANs
+Italian_data <- Italian_data[complete.cases(Italian_data), ]
+Italian_data
+```
+
+Let us check whether data is now finally filtered, and how it looks like:
+```{r}
+plotA <- ggplot(Italian_data, aes(date)) +  geom_line(aes(date, daily_tests), colour="red") + ylab("Daily number of tests") + xlab("Date") + ggtitle("Daily number of tests") + theme(plot.title = element_text(hjust = 0.5)) 
+
+plotB <-ggplot(Italian_data, aes(date)) + geom_line(aes(date, daily_confirmed), colour="blue") + ylab("Daily number of confirmed cases") + xlab("Date") + ggtitle("Daily number confirmed cases") + theme(plot.title = element_text(hjust = 0.5)) 
+ggsave("ItaDaily-Filtered.png")
+
+plot_grid(plotA, plotB, labels = "AUTO")
+```
+
+See this [site](https://github.com/beoutbreakprepared/nCoV2019) for the linelist data description. Download the file and take a look at it.  It will be helpful to model the "delay distribution", that is the distribution of times between the onset of symptoms, and the reporting date of that specific case.
+```{r, include=FALSE}
+#it is really difficult to download from github unless we use bash command
+system('bash -c "wget -L  -O latestdata.tar.gz https://github.com/beoutbreakprepared/nCoV2019/blob/master/latest_data/latestdata.tar.gz?raw=true"')
+#unzip and read as a tibble
+untar("latestdata.tar.gz")
+```
+Import manually the file.
+```{r, include=FALSE}
+linelist_df <- read_delim("latestdata.csv", ',')
+```
+
+Keep only the columns of date of the onset of symptoms and the confirmation (i.e. test resulted positive) date, where both of them are present, that is to say skip rows where a NAN is present.
+Out of these columns, let us compute the difference and compute a pdf that describes the delay distribution between the onset of symptoms and the date confirmation. Since a test can be performed on the same day of the onset of symptoms, we keep values that are larger or equal than zero, and we fix a "threshold" for the maximum delay reporting, namely 35 days.
+```{r}
+linelist_df <- linelist_df %>% filter((linelist_df$country != "Mexico") & (linelist_df$country_new != "Mexico"))
+linelist_df <- linelist_df %>% select(date_onset_symptoms, date_confirmation) %>% drop_na()
+delay_distribution <- as.integer(as_date(linelist_df$date_confirmation, format = '%d.%m.%Y') - as_date(linelist_df$date_onset_symptoms, format = '%d.%m.%Y'))
+
+#keep only meaningful values: those that are larger or equal than 0 and less than 35
+delay_distribution <- delay_distribution[(delay_distribution >= 0) & (delay_distribution < 35)]
+delay_distribution_val <- data.frame(values = delay_distribution[!is.na(delay_distribution)])
+density_plot <- ggplot(delay_distribution_val, aes(x=values, after_stat(density))) + stat_bin(color="darkblue", fill="lightblue", binwidth = 1) + ylab("Density") + xlab("Number of days") + ggtitle("Delay times distribution density") + theme(plot.title = element_text(hjust = 0.5)) + xlim(-0.5, 35.5)
+ggsave("DelayTimesDistribution.png")
+density_plot
+```
+
+Let us collect everything in a dataframe, so it can be easier to be accessed when making the convolution.
+```{r}
+#this function saves the ggplot hist above information (we will need the x (e.g. days) and densities)
+pg <- ggplot_build(density_plot)
+tmp_var <- pg[[1]]
+delay_distribution_df <- data.frame(x = tmp_var[[1]]$x, density = tmp_var[[1]]$density)
+#normalization, bin_width is 1.
+delay_distribution_df$density/(1.*sum(delay_distribution_df$density))
+```
+
+We define the $\textbf{incubation period}$ as the period passing between the day when primary infection occurred, to the one when a person started showing symptoms. It is known also as "incubation period". From literature, one can retrieve that its distribution can be modeled as a Gamma distribution, whose (shape, rate) parameters are $(5.807, 0.98)$ ([source](https://www.acpjournals.org/doi/10.7326/M20-0504)). 
+Let us look how the onset distribution looks like:
+```{r}
+#onset distribution
+x <- 0:15
+onset_distribution <- dgamma(x, shape = 5.807, rate = 0.98 )
+onset_distribution_df <- data.frame(x = x, density = onset_distribution) 
+
+delay_distribution_and_onset <- convolve(delay_distribution_df$density, rev(onset_distribution), type = "open")
+
+
+#code for plotting
+gen_data_tl <- mutate( onset_distribution_df, density = lag(density) )
+gen_all <- bind_rows( old = onset_distribution_df, new = gen_data_tl, .id="source" ) %>% arrange( x, source ) 
+onset_distr <- ggplot(onset_distribution_df, aes(x, density)) + geom_step() + geom_ribbon( data = gen_all, aes( ymin = 0, ymax = density ), fill="hotpink", alpha=0.5 ) + ylab("Density") + xlab("Number of days") + ggtitle("Symptoms onset distribution") + theme(plot.title = element_text(hjust = 0.5)) + xlim(0, 15)
+ggsave("OnsetDistribution.png")
+onset_distr
+```
+
+Therefore we can convolve the delay distribution with the reversed onset distribution. In this way, we can retrieve a third distribution, that describes the delay times that elapse between the infection of a certain person, and the consequent positive test, which we recall to our observable. 
+The code for this is:
+```{r}
+#cast it to a dataframe for an easier management and normalize
+delay_distribution_and_onset <- data.frame(x = 0:(length(delay_distribution_and_onset)-1), density = delay_distribution_and_onset)
+delay_distribution_and_onset$density <- delay_distribution_and_onset$density/(1.*sum(delay_distribution_and_onset$density))
+
+#code for plotting
+gen_data_tl <- mutate( delay_distribution_and_onset, density = lag(density) )
+gen_all <- bind_rows( old = delay_distribution_and_onset, new = gen_data_tl, .id="source" ) %>% arrange( x, source ) 
+Onset_convolved <- ggplot(delay_distribution_and_onset, aes(x, density)) + geom_step() + geom_ribbon( data = gen_all, aes( ymin = 0, ymax = density ), fill="seagreen3", alpha=0.5 ) + ylab("Density") + xlab("Number of days") + ggtitle("Time infection-positive test distribution density") + theme(plot.title = element_text(hjust = 0.5)) + xlim(0, 35)
+ggsave("ConvolvedDistribution.png")
+Onset_convolved
+```
+
+The last ingredient one may want to consider deals with how infection occurs. From the theory we know that infectivity for a person follows a distribution depending on time (i.e. there will be a time-window when a person is more infectious and the occurrence of spreading is more probable), which is introduced [here](https://www.ijidonline.com/article/S1201-9712%2820%2930119-3/pdf), and in particular it is a lognormal distribution with parameters $(\mu, SD) = (4.7, 2.9)\ days $. We refer to this distribution as the \textbf{generation time} distribution.
+In order to visualize it:
+```{r}
+n_days <- 20
+#Generation times distribution:
+x <- seq(0, n_days, by = 1)
+
+mu_gt <- 4.7
+sigma_gt <- 2.9
+
+mu_gt_val <- log(mu_gt**2/sqrt(mu_gt**2 + sigma_gt**2))
+sigma_gt_val <- sqrt(log(sigma_gt**2/mu_gt**2 + 1))
+
+generation_distribution <- dlnorm(x, meanlog = mu_gt_val, sdlog = sigma_gt_val)
+gen_data <- data.frame(x = x, density = generation_distribution)
+
+#code for plot
+gen_data_tl <- mutate( gen_data, density = lag(density) )
+gen_all <- bind_rows( old = gen_data, new = gen_data_tl, .id="source" ) %>% arrange( x, source ) 
+gt_plot <- ggplot(gen_data, aes(x, density)) + geom_step() + geom_ribbon( data = gen_all, aes( ymin = 0, ymax = density ), fill="tomato", alpha=0.5 ) + ylab("Density") + xlab("Number of days") + ggtitle("Generation times distribution density") + theme(plot.title = element_text(hjust = 0.5)) + xlim(0, n_days)
+ggsave("GtDistribution.png")
+gt_plot
+```
+
+#The Rt parameter
+
+If a single person is infected at the start, the newly infected people is directly proportional wrt the so called $R_t$, which we assume for this example to be constant. Indeed, in our project we will try to infer the $R_t$ which, according to the definition varies wrt time. 
+```{r}
+Rt_vec <- seq(1, 2.5, by = .5)
+
+days <- seq(1:n_days)
+inf_dataf <- data.frame(x = days)
+
+Rt_plot <- ggplot()
+
+for (Rt in Rt_vec){
+
+  #we must start with 1 infected
+  y <- rep(0., n_days)
+  y[1] <- 1.
+  
+  #loop over the days
+  for ( day in 2:n_days ){
+    for ( index in 1:(day-1)){
+      # loop over previous days
+        y[day] <- y[day] + y[day - index] * Rt * gen_data$density[index]
+    }
+  }
+  inf_dataf <- cbind(inf_dataf, y)
+}
+
+#rename the columns
+colnames(inf_dataf) <- c("days", "Rt1", "Rt1.5", "Rt2", "Rt2.5")
+
+#plot stuff
+plot1 <- ggplot(inf_dataf, aes(x = days)) + geom_line(aes(y = Rt1, colour = 'red')) + geom_line(aes(y = Rt1.5,  colour = 'green')) + geom_line(aes(y = Rt2, colour = 'blue')) + geom_line(aes(y = Rt2.5, colour = 'black')) + ggtitle("Newly infected people for different Rt values") + theme(plot.title = element_text(hjust = 0.5)) + labs(x = "Days", y = "Newly infected") + scale_color_manual(name = "Rt", values = c("red", "blue", "green", "black"), labels = c("Rt = 2.5", "Rt = 2.0", "Rt = 1.5", "Rt = 1.0"))
+ggsave("New_infections_vs_days.png")
+plot1
+```
+
+Hence, given a single contagion on the very first day ($t = 0$), the expected number of positive cases for different values of $R_t$ would be function also of the delay distribution in such way:
+```{r}
+
+exp_dataf <- data.frame(days = days)
+Exp_tests_Rt_plot <- ggplot()
+
+#subset only important data
+tmp_val <- select(inf_dataf, Rt1, Rt1.5, Rt2, Rt2.5)
+
+#apply the convolution
+tmp_val <- sapply(tmp_val, convolve, y = rev(delay_distribution_and_onset$density), type = "open")
+diff_days <- nrow(tmp_val) - nrow(delay_distribution_and_onset)
+
+#add columns to the database
+#exp_dataf <- cbind(exp_dataf, tmp_val[seq(diff_days,diff_days+nrow(exp_dataf)-1),])
+exp_dataf <- cbind(exp_dataf, tmp_val[(1:nrow(exp_dataf)),])
+
+
+#plot stuff
+plot2 <- ggplot(exp_dataf, aes(x = days)) + geom_line(aes(y = Rt1, colour = 'red')) + geom_line(aes(y = Rt1.5,  colour = 'green')) + geom_line(aes(y = Rt2, colour = 'blue')) + geom_line(aes(y = Rt2.5, colour = 'black')) + ggtitle("Expected number of positive tests for different Rt values") + theme(plot.title = element_text(hjust = 0.5)) + labs(x = "Days", y = "Expected positive tests") + scale_color_manual(name = "Rt", values = c("red", "blue", "green", "black"), labels = c("Rt = 2.5", "Rt = 2.0", "Rt = 1.5", "Rt = 1.0"))
+ggsave("Pos_tests_vs_days.png")
+plot2
+```
+
+## Summary - GENERATIVE PROCESS
+#https://docs.pymc.io/api/distributions/discrete.html#pymc3.distributions.discrete.NegativeBinomial
+#https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0002185
+
+The generative process for our observable, that is the number of positive tests, develops itself according to the following steps:
+\begin{enumerate}
+  \item A person is infected at time $t$ ($R_t$ will be related to this time instant)
+  \item According to the \textbf{generation time} distribution, other individuals are infected after some time
+  \item After some time (~ incubation period), there is the onset of symptoms and people end up being tested. Results come after a certain time, which is distributed according to the \textbf{delay distribution}. 
+\end{enumerate}
+
+Moreover, we make the assumption that $\textit{every}$ infected person that does the test is successfully reported (i.e. test efficiency is maximum), and testings occur independently.
+
+## Infer when infections occurred
+
+We recall now that that our observable (i.e. the daily number of positive tests) does depend on the delay distribution. Indeed a person gets infected (~ generation time), starts to show symptoms according to the "onset" distribution (~ incubation period), and finally is tested either on the same day or any other day (~ delay distribution period).
+
+Hence we can convolve the number of positive tests on a given day with the convolution of the incubation+delay distribution. In this way, our curves shall be somehow "shifted" back in time, thus inferring when most likely the infections have occurred. This is indeed the quantity we need for our model, since Rt is directly related to it.
+```{r}
+offset <- 10
+
+diff_days <- nrow(Italian_data) - nrow(delay_distribution_and_onset)
+
+new_data_conv <- rev(convolve(rev(Italian_data$daily_confirmed), rev(delay_distribution_and_onset$density), type = 'open')[1:nrow(Italian_data)])
+#new_data_conv <- new_data_conv[nrow(delay_distribution_and_onset):(length(new_data_conv)+20)]
+new_length_dataframe <- length(new_data_conv)
+
+Italian_data_new <- Italian_data[1:(new_length_dataframe - 1),]
+Italian_data_new$daily_infections <- new_data_conv[1:(new_length_dataframe - 1)]
+
+#adjust for right censor
+rev_cumsum <- rev(cumsum(delay_distribution_and_onset$density))
+cumulative_p_delay <- c(rep(1., length(Italian_data_new$daily_infections) - length(rev_cumsum )), rev_cumsum )
+cumulative_p_delay <- cumulative_p_delay
+Italian_data_new$daily_infections_adjusted <- Italian_data_new$daily_infections/cumulative_p_delay
+Italian_data_new <- Italian_data_new[1:(nrow(Italian_data_new)-offset),]
+Italian_data_new$date <- as.Date(Italian_data_new$date)
+```
+
+The last step has been developed according to the following argument: specially for the very last days some infections may have occurred, but there was not enough time to have them reported. Indeed, making the convolution, one can see as the most right (i.e. the latest data) branch of the curve vanishses. This makes sense: we cannot infer how many infections might have occurred in the past in absence of future data. 
+However, it is still possible to infer how many infections might occur by normalizing the latest data wrt the reversed-cumulative of the onset-delay function.
+
+Plot everything to visually prove what we have done:
+```{r}
+curves <- ggplot(Italian_data_new, aes(date)) + theme(plot.title = element_text(hjust = 0.5)) + ggtitle("Incidence, inferred infections at different pre-processing steps") +
+  geom_line(aes(x = date, y = daily_confirmed, colour="Incidence"), linetype = 2) +
+  geom_line(aes(x = date, y = daily_infections, colour="Inferred infections"), linetype = 3) +
+  geom_line(aes(x = date, y = daily_infections_adjusted, colour="Inferred infections (adjusted)"), linetype = 1 ) +
+  scale_colour_manual(name="Curve", values=c("Incidence"="red", "Inferred infections"="blue", "Inferred infections (adjusted)"="black")) +
+  guides(shape = FALSE, colour = guide_legend(override.aes = list(linetype = c("dashed","dotted","solid"))))+
+  labs(x = "Days", y = "Number of people")
+ggsave("Curves_for_chain.png")
+curves
+```
+
+Write now csv files to store variables and then collect garbage/clean everything.
+```{r}
+write.csv(Italian_data, 'Italian_data.csv')
+write.csv(Italian_data_new, 'Italian_data_new.csv')
+write.csv(delay_distribution_and_onset, 'delay_distr_onset.csv')
+write.csv(delay_distribution_df, 'delay_distr.csv')
+```
+
+Clean the environment to free memory, so it compiles faster and does not break.
+```{r, include=FALSE}
+rm(list = ls(all.names = TRUE)) #will clear all objects includes hidden objects.
+gc() #free up memory and report the memory usage.
+```
+
+Read now csv files to retrieve variables which have been just saved:
+```{r}
+offset <- 10
+
+Italian_data <- read.csv("Italian_data.csv")
+Italian_data_new <- read.csv("Italian_data_new.csv")
+delay_distribution_and_onset <- read.csv("delay_distr_onset.csv")
+delay_distribution_df <- read.csv("delay_distr.csv")
+rev_cumsum <- rev(cumsum(delay_distribution_and_onset$density))
+cumulative_p_delay <- c(rep(1., length(Italian_data_new$daily_infections) - length(rev_cumsum) + offset ), rev_cumsum[1:(length(rev_cumsum)-offset)] )
+```
+
+# The Bayesian Model
+
+## Bettencourt & Ribeiro's Approach
+
+Having we already introduced the $R_t$, one should think about its dependencies. For sure it depends indirectly on the number of positive tests obtained on a given day: from that observed quantity we will try to infer how many infections occur. It is reasonable to assume that $R_t$ depends on the previous values, that is to say $R_{t-1}$, that in turn depends on $R_{t-2}$ and so on and so forth. 
+
+Defining with $k$ the inferred number of infections occurred at day $t$, we can use the Bayes' Theorem rule, and find that for a single day it holds that:
+\begin{equation}
+P(R_t | k) = \frac{P(k|R_t)P(R_t)}{P(k)}
+\end{equation}
+
+In other words, the probability that $R_t$ takes a certain value given $k$ infections have occurred **(posterior)** is equal to the product to have $k$ infections given that $R_t$, times the **prior** which sets some belief on the values of $R_t$. The denominator is the **normalization** term, namely the probability to infer $k$ infections. 
+
+
+### The Prior 
+
+In order to make the process iterative it is needed to model the aforementioned dependence of $R_t$ on the previous days' values, that is to say that we need to use somehow yesterday's prior $P(R_{t-1})$. We assume that $R_t$ on day $t$ will distribute as a Gaussian $\mathcal{N}(R_{t-1}, \sigma_{step})$ centered on the previous day's value of $R_t$. The $\sigma_{step}$ is assumed to be constant and equal to $0.035$, to make it not change fast. $R_{t-1}$ is therefore the value obtained from the posterior $P(R_{t-1}|k_1)$. We can equivalently think of this process as a Gaussian Random Walk with steps equal to $\sigma_{step}. 
+
+Formally our prior reduces to:
+\begin{equation}
+  P(R_t | R_{t-1}) = \mathcal{N}(R_{t-1}, \sigma_{step}) 
+\end{equation}
+
+Thanks to Bayes' rule, at the first step, one can write the posterior at day $t=1$ that is:
+\begin{equation}
+  P(R_1 | k_1) \propto P(R_1) \cdot \mathcal{L}(k_1 | R_1)
+\end{equation}
+
+And iterating to the second day $t=2$:
+\begin{equation}
+  P(R_2 | k_1, k_2) \propto P(R_2) \mathcal{L}(k_2 | R_2) = \sum_{R_1} P(R_1 | k_1) \cdot P(R_2 | R_1) \mathcal{L}(k_2 | R_2)
+\end{equation}
+
+and so on and so forth... 
+
+### The Likelihood
+
+We still however need to define what is the Likelihood, which describes how likely we are to see $k$ new cases, given a value of $R_t$. Due to the nature of our problem, we can think that the expected values $\lambda$ of positive tests must depend on $R_t$, and that its count must follow a Poisson distribution since it is a counting process.
+In other words, given an average arrival rate of $\lambda$ new cases per day, the probability of seeing $k$ new cases is distributed according to the Poisson distribution:
+\begin{equation}
+  P(k|\lambda) = \frac{\lambda^k e^{-\lambda}}{k!}
+\end{equation}
+
+The connection between the just introduced $\lambda$ and $R_t$ is described in [this work](https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0002185), and takes the form:
+
+\begin{equation}
+  \lambda = k_{t-1} e^{\mu (R_t -1)}
+\end{equation}
+
+where $k_{t-1}$ is the number of observations on the previous day (that in our case will be the inferred number of infections), while $\mu$ is the reciprocal of the serial interval or, in other words, the reciprocal of the expected length of stay in the infectious compartment.
+
+## Running the model
+
+Briefly, we recall that we assume a Poisson likelihood, then and feed it what we believe is the infection curve based on observed data. We define $\theta = \gamma(R_t-1)$ and model $ I^\prime = Ie^{\theta} $ where $\theta$ observes a random walk. We let $\gamma$ vary independently based on known parameters for the serial interval, that can be used as a proxy for the generation times. Parameters for it are given by literature. Finally, we can recover $R_t$ easily by $R_t = \frac{\theta}{\gamma}+1$
+
+The only tricky part is understanding that we're feeding in onset cases to the likelihood. So $\mu$ of the poisson is the positive, non-zero, expected onset cases we think we'd see today.
+Initialize model parameters.
+```{r}
+#how many observations we have
+T <- length(Italian_data_new$daily_infections)
+
+#theta is the parameter we want to find, here we fix random walk params
+theta_init_mean <- 0.1
+theta_init_sd <- 0.1
+step_size_prior_sd <- 0.03
+
+#generation times distribution parameters, given the one we find from literature
+mu_gt <- 4.7
+sigma_gt <- 2.9
+shape_gt <- (mu_gt*mu_gt)/(sigma_gt*sigma_gt)
+rate_gt <- (mu_gt)/(sigma_gt*sigma_gt)
+
+model_input_data <- list(
+    T = T,
+    daily_infections = round(Italian_data_new$daily_infections),
+    cumulative_p_delay = cumulative_p_delay,
+    step_size_prior_sd = step_size_prior_sd,
+    theta_init_mean = theta_init_mean,
+    theta_init_sd = theta_init_sd,
+    shape_gt = shape_gt,
+    rate_gt = rate_gt
+  )
+```
+
+Compile the stan model:
+```{r}
+# https://mc-stan.org/docs/2_26/reference-manual/index.html
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = TRUE)
+
+# compile the model now, given that the memory is less occupied
+model <- stan_model("Rt_model.stan")
+```
+
+```{r}
+fit <- sampling( model, model_input_data, chains = 12, cores = 12, iter = 10000 )
+```
+
+```{r}
+check_hmc_diagnostics(fit)
+```
+
+```{r}
+fit
+```
+
+Save locally the results obtained via fit.
+```{r}
+saveRDS(fit, "MyFit.rds")
+write.csv(as.data.frame(summary(fit)), 'results.csv')
+```
+
+Import again data and finally keep only $R_t$ values
+```{r}
+results <- read.csv("results.csv")
+
+#string for correctly parsing names (we want only Rt parameter")
+string <- c()
+for (t in 2:nrow(Italian_data_new)){
+  string <- c(string, paste("Rt[",toString(t),"]", sep = ''))
+}
+results <- results %>% filter(X %in% string)
+results <- cbind(date = as_date(Italian_data_new$date[1:(nrow(Italian_data_new)-2)]), results)
+results
+```
+
+Plot the estimate of $R_t$ and CI intervals.
+```{r}
+final <- ggplot(results, mapping = aes(x = date)) + 
+  theme(plot.title = element_text(hjust = 0.5)) +
+  geom_ribbon(aes(ymin = summary.25., ymax = summary.75., alpha = '50% CI'), fill = 'red' ) +
+  geom_ribbon(aes(ymin = summary.2.5., ymax = summary.97.5., alpha = '95% CI'), fill = 'red' ) +
+  geom_line(mapping = aes(y = summary.mean,  colour = "mean"), size = 0.5) +
+  labs(x = "Day", y = "Rt") + ggtitle("Italian Rt") +
+  geom_hline(yintercept=1.0, linetype='dotted', col = 'red') +
+  annotate("text", x = as.Date("2020-02-26"), y = 0.905, label = "Rt=1", vjust = -0.5) +
+  scale_colour_manual(name='Rt', values="black") +scale_alpha_manual('CI',  values=c(0.45, 0.1))
+ggsave("Final.png")
+final
+```
+
+
+
+
+
+
+
+
+

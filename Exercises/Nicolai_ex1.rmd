@@ -1,0 +1,349 @@
+---
+title: "Ex01"
+author: "Andrea Nicolai"
+date: "5/4/2020"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+EXERCISE 1 
+
+Given the following lakes, make a dataframe out of this table after having put all the data in their respective vectors.
+```{r}
+names <- c("Loch Ness", "Loch Lomond", "Loch Morar", "Loch Tay", "Loch Awe", "Loch Maree", "Loch Ericht", "Loch Lochy", "Loch Rannoch", "Loch Shiel", "Loch Katrine", "Loch Arkaig", "Loch Shin")
+volume <- c(7.45, 2.6,2.3,1.6,1.2,1.09,1.08,1.07,0.97,0.79,0.77,0.75,0.35)
+area <- c(56,71,27,26.4,39,28.6,18.6,16,19,19.5,12.4,16,22.5)
+length <- c(39,36,18.8,23,41,20,23,16,15.7,28,12.9,19.3,27.8)
+max_depth <- c(230,190,310,150,94,114,156,162,134,128,151,109,49)
+mean_depth <- c(132,37,87,60.6,32,38,57.6,70,51,40,43.4,46.5,15.5)
+
+scottish.lakes <- data.frame(names,volume,area,length,max_depth,mean_depth)
+```
+
+The largest volume lake is:
+```{r}
+scottish.lakes[order(scottish.lakes$volume, decreasing = TRUE),][1,1]
+head(scottish.lakes, n=1)['names']
+```
+
+The lowest volume lake is:
+```{r pres}
+scottish.lakes[order(scottish.lakes$volume),][1,1]
+#scottish.lakes[order(scottish.lakes$volume),]
+#head(scottish.lakes, n=1)
+
+```
+The largest area lake is:
+```{r}
+scottish.lakes[order(scottish.lakes$area, decreasing = TRUE),][1,1]
+```
+
+The smallest area lake is:
+```{r}
+scottish.lakes[order(scottish.lakes$area),][1,1]
+```
+
+The two largest area lakes is:
+```{r}
+scottish.lakes[order(scottish.lakes$area),]
+head(scottish.lakes, n=2)
+
+```
+
+Total area covered by water is:
+```{r}
+sum(scottish.lakes$area)
+```
+
+
+
+
+
+
+
+
+
+EXERCISE 2:
+
+```{r}
+#install.packages(c("DAAG","tibble"), type="source")
+```
+
+
+
+Getting info info on package content:
+```{r}
+help(package="DAAG")
+```
+
+
+
+
+Getting info on 'ais' package and making a table out of that:
+```{r}
+library(tibble)
+str(DAAG::ais)
+tib_dataframe <- as_tibble(DAAG::ais)
+```
+
+
+Creating a table grouping the data by gender and by sport, and then creating a barplot out of that:
+```{r}
+  sport_vs_sex <- table(DAAG::ais[c("sex", "sport")])
+  barplot(sport_vs_sex, main="Sport distribution by sex",
+          xlab="sport", cex.names=0.8,  ylab="Number of people", col=c("pink","blue"), las =2,
+          legend=TRUE, args.legend = list( x = "topright", ncol = 2))
+```
+
+Is there any missing values in the dataframe? And how many, if so?
+```{r}
+any(is.na.data.frame(tib_dataframe))
+which(is.na(DAAG::ais))
+```
+
+Now let's produce boxplots of the main blood variables (’red blood cell counts’, ’white blood cell counts’,’hematocrit’ and ’hemoglobin concentration’), for different kind of sports:
+```{r}
+boxplot(tib_dataframe$rcc~tib_dataframe$sport, 
+        main = 'red blood cell counts per sport', xlab = 'sport', ylab = 'rcc', 
+        col = 'red', border = 'black', las = 2, cex.axis=0.7)
+boxplot(tib_dataframe$wcc~tib_dataframe$sport, 
+        main = 'white blood cell counts per sport', xlab = 'sport', ylab = 'wcc', 
+        col = 'white', border = 'black', las = 2, cex.axis=0.7)
+boxplot(tib_dataframe$hc~tib_dataframe$sport, 
+        main = 'hematocrit counts per sport', xlab = 'sport', ylab = 'hc', 
+        col = 'blue', border = 'black', las = 2, cex.axis=0.7)
+boxplot(tib_dataframe$hg~tib_dataframe$sport, 
+        main = 'hemoglobin counts per sport', xlab = 'sport', ylab = 'hg', 
+        col = 'brown', border = 'black', las = 2, cex.axis=0.7)
+```
+
+Now we want to make some scatter plot correlations of the same blood variables using different colors and symbols for the two genders in the sample
+```{r}
+my_colors <- c('pink', 'blue')
+pairs(tib_dataframe[1:4], col = my_colors[tib_dataframe$sex], 
+      pch = c(17,25)[tib_dataframe$sex], lower.panel=NULL)
+```
+ 
+ 
+ 
+
+EXERCISE 3
+
+Initializing everything by the script given by professor:
+```{r}
+needed_packages <- c( "lubridate" , "readxl" , "curl", "gdata")
+already_installed <- needed_packages %in% installed.packages()
+for ( pack in needed_packages [!already_installed]) {
+  message (paste(" To be installed : " ,pack,sep = " " ))
+  install.packages( pack )
+}
+library(lubridate)
+library(readxl)
+library(curl)
+library(tibble)
+library('gdata')
+url <- "https://www.ecdc.europa.eu/sites/default/files/documents/"
+fname <- "COVID-19-geographic-disbtribution-worldwide-"
+date <- lubridate::today() - 1
+ext = ".xlsx"
+target <- paste( url , fname , date , ext , sep = "" )
+message ( "target:" , target )
+tmp_file <- tempfile ( "data" , "/tmp" , fileext = ext )
+tmp <- curl::curl_download ( target , destfile = tmp_file )
+covid <- readxl::read_xlsx ( tmp_file )
+```
+
+Let's examine the loaded tibble structure:
+```{r}
+str(covid)
+```
+
+Now we want to create a sub-tibble containing only the last day  and produce a table with all the countries with number of deaths or number of new cases greater than 200:
+```{r}
+last_day <- subset(covid, dateRep == date)
+high <- last_day[last_day$cases > 200 | last_day$deaths > 200, ]
+#high <- subset(last_day, cases > 200 | deaths > 200)
+```
+
+We then select the top 10 countries, in terms of cases, and plot the total number of cases as a function of time. Plot the total number of deaths as a function of time. In order to compare the different curves, normalize the first date-time plot to the same t_0 value.
+First 10 top countries are:
+```{r}
+highest <- head(high[order(-high$cases),], 10)
+cat(paste(c("The 10 states with the largest number of cases at 31st of March are, in order: ")))
+highest$countriesAndTerritories
+```
+
+We now want to reaorder the dataset starting from the oldest data available for those countries:
+```{r}
+covid <- covid[order(covid$dateRep),]
+```
+
+Here we want to find which can be the so-called t0, in order to plot data starting from the same date. 
+```{r}
+
+t0 <- min(covid$dateRep)
+for (i in highest$countriesAndTerritories) {
+  data_country <- (subset(covid, countriesAndTerritories == i))
+  ifelse( min(data_country$dateRep) > t0, t0 <- min(data_country$dateRep), t0 ) 
+}
+```
+
+
+Then we shift the data by 4 days since the Turkey has been missing data on a couple of days after the just-found t0 (just to train using time units computations):
+```{r}
+shift_date <- t0 + as.difftime(4, units = "days") 
+```
+
+
+Now we want to create a dataframe for the daily cases and rename its columns:
+```{r}
+cases_dataframe <- tibble(unique(covid$dateRep[covid$dateRep >= shift_date]))
+for (i in highest$countriesAndTerritories) {
+  cases_country <- (subset(covid, (countriesAndTerritories == i) & (dateRep >= shift_date)))['cases']
+  print(i)
+  cases_dataframe <- cbindX(cases_dataframe, cases_country )
+}
+colnames(cases_dataframe)[1] <- "Date"
+colnames(cases_dataframe)[2:ncol(cases_dataframe)] <- highest$countriesAndTerritories
+```
+
+Now we want to create a dataframe for the daily deaths and rename its columns:
+```{r}
+deaths_dataframe <- tibble(unique(covid$dateRep[covid$dateRep >= shift_date]))
+for (i in highest$countriesAndTerritories) {
+  deaths_country <- (subset(covid, (countriesAndTerritories == i) & (dateRep >= shift_date)))['deaths']
+  deaths_dataframe <- cbindX(deaths_dataframe, deaths_country )
+}
+colnames(deaths_dataframe)[1] <- "Date"
+colnames(deaths_dataframe)[2:ncol(deaths_dataframe)] <- highest$countriesAndTerritories
+```
+
+
+Plot functions
+```{r}
+library("ggplot2")
+library("reshape2")
+cases_melted <- melt(cases_dataframe ,  id.vars = 'Date', variable = "Country")
+ggplot(data= cases_melted , aes(x=as.Date(Date), y=value, color=Country)) + 
+       geom_point() + geom_line() + 
+       labs(title = "Cases rate in function of time", x = "Date", y = "Daily cases")
+
+deaths_melted <- melt(deaths_dataframe ,  id.vars = 'Date', variable = "Country")
+ggplot(data = deaths_melted , aes(x=as.Date(Date), y=value, color = Country)) + 
+  geom_point() + geom_line() +
+  labs(title = "Deaths rate in function of time", x = "Date", y = "Daily deaths")
+
+```
+
+Since Brazil, Turkey and Israels hold some missing data (countries depend on the day we run the code), we could have deleted them from the countries found before in order to have a longer-range date graphs. But then we were able to find a package 'gdata' that allows us to manage and bind columns (using 'cbindX') with different number of rows, otherwise using the plain cbind it would return an error.
+
+Let's choose as offset (i.e. starting point), 21st of February:
+```{r}
+offset <- as.Date("2020-02-21")
+```
+
+
+Same functions for plotting as before:
+```{r}
+cases_melted <- melt(cases_dataframe ,  id.vars = 'Date', variable = "Country")
+plt <- ggplot(data= cases_melted , aes(x=as.Date(Date), y=value, color=Country)) + 
+  geom_point() + geom_line() + scale_x_date(limits = c(offset, date)) +
+  labs(title = "Cases rate in function of time starting from 21 Febr", x = "Date", y = "Daily cases")
+suppressWarnings(print(plt))
+
+deaths_melted <- melt(deaths_dataframe ,  id.vars = 'Date', variable = "Country")
+plt <- ggplot(data = deaths_melted , aes(x=as.Date(Date), y=value, color = Country)) + geom_line() + scale_x_date(limits = c(offset, date)) + geom_point() +
+  labs(title = "Deaths rate in function of time starting from 21 Febr", x = "Date", y = "Daily deaths")
+suppressWarnings(print(plt))
+```
+
+
+Now we want to shift to a t0_i and plot data for each i-th country in function of the time, starting from the day we had the first cases in that specific country. Then, we will make a plot both for daily/cases death, and for cumulative cases/deaths.
+```{r}
+cases_dataframe <- data.frame('days from first case' = 0) #dummy value
+max_length <- 0
+for (i in countries) {
+  cases_country <- (subset(covid, countriesAndTerritories == i))
+  
+  #find first day with non zero cases
+  new_t0 <- head(subset(cases_country, cases_country$cases != 0 ),1)['dateRep']
+  
+  #take all days after the non zero one
+  non_zero_cases <- cases_country$cases[cases_country$dateRep >= new_t0$dateRep ]
+  ifelse(length(non_zero_cases) > max_length,
+         max_length <- length(non_zero_cases),
+         max_length)
+  non_zero_cases <- data.frame( non_zero_cases)
+  cases_dataframe <- cbindX(cases_dataframe, non_zero_cases)
+}
+
+colnames(cases_dataframe)[1] <- 'days_from_first_case'
+cases_dataframe$days_from_first_case <- 0:(max_length-1)
+colnames(cases_dataframe)[2:ncol(cases_dataframe)] <- countries
+```
+
+```{r}
+deaths_dataframe <- data.frame('days from first death' = 0) #dummy value
+max_length <- 0
+for (i in countries) {
+  deaths_country <- (subset(covid, countriesAndTerritories == i))
+  
+  #find first day with non zero cases
+  new_t0 <- head(subset(deaths_country, deaths_country$deaths != 0 ),1)['dateRep']
+  
+  #take all days after the non zero one
+  non_zero_deaths <- deaths_country$deaths[deaths_country$dateRep >= new_t0$dateRep ]
+  ifelse(length(non_zero_deaths) > max_length,
+         max_length <- length(non_zero_deaths),
+         max_length)
+  non_zero_deaths <- data.frame( non_zero_deaths)
+  deaths_dataframe <- cbindX(deaths_dataframe, non_zero_deaths)
+}
+
+colnames(deaths_dataframe)[1] <- 'days_from_first_death'
+deaths_dataframe$days_from_first_death <- 0:(max_length-1)
+colnames(deaths_dataframe)[2:ncol(deaths_dataframe)] <- countries
+```
+
+
+Now we want to plot the daily cases in function of the first day that has passed since the first case/death occurred for each country.
+```{r}
+cases_melted <- melt(cases_dataframe ,  id.vars = 'days_from_first_case', variable = "Country")
+plt <- ggplot(data= cases_melted , aes(x=days_from_first_case, y=value, color=Country)) + 
+  geom_point() + geom_line() + labs(title = "Daily case rate since the first death has occurred", x = "Day", y = "Daily cases")
+suppressWarnings(print(plt))
+
+deaths_melted <- melt(deaths_dataframe ,  id.vars = 'days_from_first_death', variable = "Country")
+plt <- ggplot(data = deaths_melted , aes(x=days_from_first_death, y=value, color = Country)) + geom_line() + geom_point() +
+  labs(title = "Daily death rate since the first death has occurred", x = "Date", y = "Daily deaths")
+suppressWarnings(print(plt))
+```
+We can see some countries are far behind some other ones, for example Turkey.
+
+Now we want to see the same plots, but indeed using cumulative data.
+```{r}
+for (i in countries) {
+  cases_dataframe[, i] <- cumsum(cases_dataframe[, i])
+  deaths_dataframe[, i] <- cumsum(deaths_dataframe[, i])
+}
+```
+
+```{r}
+cases_melted <- melt(cases_dataframe ,  id.vars = 'days_from_first_case', variable = "Country")
+plt <- ggplot(data= cases_melted , aes(x=days_from_first_case, y=value, color=Country)) + 
+  geom_point() + geom_line() + labs(title = "Cumulative cases since the first case has occurred", x = "Day", y = "Daily cases")
+suppressWarnings(print(plt))
+
+deaths_melted <- melt(deaths_dataframe ,  id.vars = 'days_from_first_death', variable = "Country")
+ggplot(data = deaths_melted , aes(x=days_from_first_death, y=value, color = Country)) + geom_line() + geom_point() +
+  labs(title = "Cumulative deaths since the first death has occurred", x = "Date", y = "Daily deaths")
+suppressWarnings(print(plt))
+```
+
+
+
